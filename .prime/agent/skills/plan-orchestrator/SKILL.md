@@ -1,11 +1,11 @@
 ---
 name: plan-orchestrator
-description: Orchestrate a large coding task through a master plan, phases, and a just-in-time sub-plan per phase. Use when a task is too large for one plan or one session, when the user asks for a master plan with phases and sub-plans, or when each phase must close out by proving the master plan was addressed and folding new discoveries into the master plan and the next phase.
+description: Plan and execute coding work of any size through a master plan and phases, with issue intake, scope sizing, approval gates, subagent implementation, and closeout. Use when starting from a GitHub or Linear issue or a request, when a task needs scoping and acceptance criteria, for a small one-phase task, or for large multi-phase work with just-in-time sub-plans.
 ---
 
 # Plan Orchestrator
 
-A master plan states the outcome and splits the work into phases. Each phase gets a detailed sub-plan written just before it starts. No phase implementation begins until the user has seen that phase's plan and explicitly approved it. Every approved phase is implemented by a subagent; the coordinator plans, reviews, and closes out, but does not write product code. At the end of every implementation session, the agent proves what the master plan owed, records what no earlier plan predicted, updates the master plan, commits the phase, and only then calls the phase done.
+Start from the source issue or request, size the work, and choose a one-phase plan for small tasks or a multi-phase master for large ones. A master plan states the outcome and splits the work into phases. Each phase gets a detailed sub-plan written just before it starts. No phase implementation begins until the user has seen that phase's plan and explicitly approved it. Every approved phase is implemented by a subagent; the coordinator plans, reviews, and closes out, but does not write product code. At the end of every implementation session, the agent proves what the master plan owed, records what no earlier plan predicted, updates the master plan, commits the phase, and only then calls the phase done.
 
 This skill is the coordinator's operating loop. It works for one agent doing all the work and for a coordinator delegating phases to subagents.
 
@@ -40,6 +40,74 @@ python3 <skill-dir>/scripts/plan_orchestrator.py status docs/plans/<slug>
 `<skill-dir>` is the directory containing this `SKILL.md`. Use the repository's existing plans directory if it has one; `docs/plans` is the default.
 
 To resume an existing plan, run `status` first: it prints the phase table and the resume brief. Then read `master.md` and the current phase plan.
+
+## Task intake and sizing
+
+Start here for a new request that changes the repository. Answer questions and do read-only investigation directly; do not scaffold a plan for them. For repository work, do not write a plan from the prompt alone. Read the source, scope it against the repository, ask about gaps, and size the work before choosing the plan shape. See `references/issue-intake.md` for source recipes, a scoping brief, sizing examples, and escalation rules.
+
+### Read the source
+
+Identify where the requirement lives and read all of it:
+
+- **GitHub issue or PR:** `gh issue view <number> --comments` or `gh pr view <number> --comments`.
+- **Linear, Jira, Notion, or another tracker:** use the connected MCP tools. Discover them with `mcp.list_connections` and `mcp.search_tools`; inspect the schema with `mcp.describe_tool`; then call the read tool. If no connection exists, ask the user to paste the issue.
+- **Local file, URL, or conversation:** read the file or ask for the text. Do not invent details from a title.
+
+Read the body, every comment, linked specs or designs, acceptance criteria, labels, priority, dependencies, and attachments. Record the source and issue ID in the master.
+
+### Scope against the repository
+
+Before asking questions, inspect what already exists:
+
+- `AGENTS.md`, `CLAUDE.md`, `README.md`, and the current plans.
+- The code, tests, and git history the change touches.
+- The current branch and working tree.
+- Existing behavior that the request would replace.
+
+State what you found as evidence. Never assume a path, symbol, flag, or behavior.
+
+### Ask about gaps
+
+Ask only questions that change scope, behavior, acceptance, risk, or priority. Give two or three options and a recommended default. Ask at most three to five questions per round.
+
+Good questions:
+- "Should this apply to all accounts or only the selected one?"
+- "When the file has an invalid row, should the import fail completely or skip that row?"
+
+Bad questions:
+- "Can you tell me more?"
+- "What do you want me to do?"
+
+If the source has no acceptance criteria, propose two or three and ask the user to confirm. If the source is too vague to size, stop and ask. Record every answer in the master.
+
+### Size the task
+
+| Size | Signals | Plan shape |
+|---|---|---|
+| Small | One outcome, up to about three files, no schema/API/contract change, one verification command, no cross-phase dependency, fits one session | Master with one phase and one to three steps; keep each required section short and write `none` where empty |
+| Medium | One subsystem, several files, tests, one or two user-visible behaviors | Master with one phase and three to seven steps |
+| Large | Several subsystems, a user-visible contract, migrations, dependencies, or several sessions | Full master and multi-phase map with just-in-time phase plans |
+
+A small task still gets the plan, approval, subagent, and commit gates. The gates protect the work; the plan shape only removes unnecessary phases. Do not invent future phases for a small task.
+
+If a small task grows past its plan, stop and add a phase or convert it to a larger plan. Do not expand scope silently.
+
+### Record the intake
+
+Add these lines to the master or the phase plan:
+
+```text
+Source: <issue URL, ticket ID, or "user request">
+Problem: <one or two sentences>
+Outcome: <what the user can do or see afterward>
+Acceptance: <the initial A criteria>
+Constraints: <time, files, compatibility, data>
+Non-goals: <what is explicitly excluded>
+Unknowns: <open questions and answers>
+Size: small | medium | large
+```
+
+For a small task, keep the intake to a few lines. Link to the issue instead of copying the whole thread.
 
 ## Branch and PR gates
 
@@ -91,11 +159,11 @@ If `gh` is missing, unauthenticated, or there is no remote, report the limitatio
 
 ## The loop
 
-### 1. Research, then write the master plan
+### 1. Intake, size, then write the plan
 
-Create the plan branch first (see Branch and PR gates), then research.
+Run Task intake and sizing first. Read the source, inspect the repository, ask gap questions, and choose the small/medium/large plan shape. Then create the plan branch (see Branch and PR gates).
 
-Do not write the master plan from the request alone. Read `AGENTS.md`/`CLAUDE.md`, the README, contributor docs, and the code and tests the work touches. Run the baseline build or tests. Record exact commands and results.
+For every task, write the master plan after the intake. Small and medium tasks use a one-phase master; large tasks use the full phase map. Read `AGENTS.md`/`CLAUDE.md`, the README, contributor docs, and the code and tests the work touches. Run the baseline build or tests. Record exact commands and results.
 
 Ask the user only questions that change scope, behavior, acceptance, or risk. Give each question two or three options and a recommended default. If the user delegates a choice, record the chosen default in the master plan and continue. Never invent paths, symbols, flags, or behavior.
 
@@ -306,5 +374,6 @@ Subagent implementation is mandatory for every approved phase. The coordinator h
 - `references/master-template.md` — master plan structure.
 - `references/phase-plan-template.md` — phase sub-plan and closeout structure.
 - `references/worker-prompt-template.md` — required prompt for the subagent that implements an approved phase.
+- `references/issue-intake.md` — reading GitHub/Linear/tracker issues, extraction checklist, gap questions, and sizing examples.
 - `scripts/plan_orchestrator.py` — `new`, `add-phase`, `approve`, `record-commit`, `discoveries`, `check`, `status`.
 - `../plan-resume/` — the new-session resume skill; use it before editing an existing plan.

@@ -4,6 +4,8 @@
 - Master version: 1
 - Status: draft
 - Created: {{DATE}}
+- Source: <issue URL, ticket ID, or user request>
+- Size: small | medium | large
 - Owner: <coordinator agent or user>
 - Plan directory: `docs/plans/{{SLUG}}`
 - Branch: `plan/{{SLUG}}`
@@ -26,6 +28,7 @@
 
 | Area | Evidence | Constraint or surprise |
 |---|---|---|
+| Request | <source and date read> | <scope, gap-question answers, and assumptions> |
 | <component> | `path:line` — <symbol> | <what limits the design> |
 | Baseline | `<command>` — <result> | <failing tests or warnings> |
 
