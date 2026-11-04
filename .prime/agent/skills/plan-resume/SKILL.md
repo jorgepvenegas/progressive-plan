@@ -63,7 +63,7 @@ Never discard uncommitted work to make the state look clean. If the dirty files 
 | Current phase state | Next action |
 |---|---|
 | No phase plan yet | Write the next phase plan from the master; keep it `draft`/`planned`. |
-| Plan written, not approved | Present the plan to the user and ask for approval. Do not implement. |
+| Plan written, not approved | Present the plan to the user and ask for approval. If the user requests changes, use the `refine-phase` skill; do not implement. |
 | Approved and `ready` | Set `in_progress`, spawn the implementation subagent, and wait. |
 | `in_progress` | Inspect the worker's files, verification, closeout, and commit; do not reimplement. Finish the coordinator review. |
 | `partial` closeout | Continue the remaining steps with a subagent, or close the session with a partial verdict and a handoff. |

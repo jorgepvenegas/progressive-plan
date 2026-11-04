@@ -85,7 +85,7 @@ A phase may move to `ready` only after the user has seen its plan and explicitly
 
 1. Finish the phase plan and run `check`. Keep the phase `draft` / master `planned`.
 2. Send the user a short review request: absolute plan path, phase outcome, acceptance criteria, and the top risks. Ask directly: "Approve implementation of phase Pn?"
-3. Wait. Do not edit implementation files, set `in_progress`, or spawn a worker for that phase.
+3. Wait. Do not edit implementation files, set `in_progress`, or spawn a worker for that phase. If the user asks for changes instead of approving, use the `refine-phase` skill (sibling directory); keep the phase `draft` and return to this gate after the refinement.
 4. On explicit approval, run `plan_orchestrator.py approve <plan-dir> <phase-id> --by "<user>"`. This writes `Approved by` and `Approved at`, sets the phase and master row to `ready`, and validates the plan.
 5. Only then set the phase `in_progress` in the master and start step 1.
 6. Approval of one phase does not approve any later phase. Repeat the gate for every phase.
