@@ -109,6 +109,25 @@ Size: small | medium | large
 
 For a small task, keep the intake to a few lines. Link to the issue instead of copying the whole thread.
 
+## Code standards
+
+The repository owns its standards. Read `AGENTS.md`/`CLAUDE.md`, contributor docs, tooling config, and nearby code; record the exact checks in the master. Do not restate a style guide in the plan.
+
+Every phase and every step follows these rules:
+
+- **Smallest change.** Add only what the acceptance criteria require. No speculative abstraction, extension point, configuration, or dependency (YAGNI).
+- **Reuse before writing.** Use an existing helper or pattern when it fits. Remove duplication the change creates, but do not build a framework for two similar lines (DRY).
+- **Expressive code.** Names state intent and units; a function or module does one job. No dead code, commented-out code, or unused exports.
+- **Comments explain why.** Write a comment only for a non-obvious constraint, workaround, or trade-off that the code cannot show. Do not narrate what the code does, restate a name, or keep a changelog in comments.
+- **Tests are evidence.** A test asserts observable behavior or a failure the requirements name. Do not add a test that restates the implementation, repeats another test's assertion, or would still pass if the behavior broke. Test behavior, not internal calls.
+- **No drive-by cleanup.** Leave unrelated code, formatting, names, and dependencies alone. Report the problem instead.
+
+Enforcement:
+
+- The master records the project's standards commands (format, lint, type check, tests). Each phase verification includes the commands that cover the changed code.
+- The worker runs those commands, records the result in the phase plan's `Code standards check`, and reports any rule it cannot meet. It does not weaken the rule.
+- The coordinator reviews the diff for duplicated logic, speculative abstraction, dead code, comment noise, and tautological tests. A green test suite does not excuse a violation.
+
 ## Branch and PR gates
 
 Every plan gets its own branch. All plan and phase commits land on it. When the final phase is done and the definition of done is met, offer a draft PR. Never push or open a PR without explicit approval.
@@ -221,7 +240,7 @@ Silence, a prior "keep going", approval of the master plan, or approval of an ea
 2. Set the phase `in_progress` in the master and in the phase plan before spawning.
 3. Spawn one subagent for the phase with the prompt from `references/worker-prompt-template.md`, filled with absolute paths, the phase ID, the scope fence, and the approval record. Use your harness's subagent mechanism: in prime-agent, `await rlm.spawn(prompt, name="p3-dashboard-ui")`; in Claude Code, the Task tool; in Pi, the `pi-subagents` tools. Keep the handle or task ID.
 4. Wait for the worker's reply. Do not implement the phase while waiting. Do not start a second worker on the same phase or the same shared files.
-5. Review the worker's output yourself: read the changed files against the phase plan's file lists, run the phase verification, inspect the commit, and read the closeout. A silent worker is not a failed worker; verify before deciding.
+5. Review the worker's output yourself: read the changed files against the phase plan's file lists, run the phase verification and the master's standards commands, inspect the commit, and read the closeout. Check the diff for duplicated logic, speculative abstraction, dead code, comment noise, and tautological tests. A silent worker is not a failed worker; verify before deciding.
 6. If the worker is blocked or wrong, send it a correction or spawn a replacement. Do not take over the implementation.
 
 ### Scope discipline and new work
@@ -260,7 +279,7 @@ Run this at the end of every session that touched implementation, and always bef
 
 On the final phase, cover every definition-of-done item in the master. Any unaddressed item forces verdict `partial`; the project is not done.
 
-**C. Run the verification.** Execute the phase verification and any master definition-of-done commands that are available now. Record exact commands and results.
+**C. Run the verification.** Execute the phase verification, the master's standards commands, and any master definition-of-done commands that are available now. Record exact commands and results.
 
 **D. Sweep for discoveries.** Answer each prompt in writing. Write "none" only after answering all five:
 
@@ -302,7 +321,7 @@ Do not update a future plan from memory. Open the file and edit it.
 
 **G. Decide the verdict.**
 
-- `addressed` — every phase criterion met, every relevant master definition-of-done item met, and no unapproved scope change. Only now may the phase become `done` in the master.
+- `addressed` — every phase criterion met, every relevant master definition-of-done item met, the code standards check is clean, and no unapproved scope change. Only now may the phase become `done` in the master.
 - `partial` — a criterion is unmet or deferred, or the session ended early. The phase stays `in_progress`. Record what remains and the next action.
 - `blocked` — an external dependency or unresolved decision stops work. Set the phase `blocked` and name the owner and the unblocking condition.
 
@@ -350,6 +369,7 @@ Verdict: addressed | partial | blocked
 Master coverage: D1 met (<evidence>), D2 partial (<gap>), D3 not started
 Discoveries no earlier plan predicted: <one line each, or "none">
 Plan updates: master v3 (<rows/sections changed>); P3 plan v2 (<sections changed>)
+Standards: passed | <unmet rule and reason>
 Commit: <short hash>
 Branch: plan/<slug>
 Next action: <one concrete action>
@@ -391,6 +411,10 @@ Subagent implementation is mandatory for every approved phase. The coordinator h
 - **PR without consent** — pushing a branch or opening a draft PR before the user explicitly agrees.
 - **Scope creep** — accepting unrelated work or opportunistic fixes into an approved phase.
 - **New-work absorption** — doing a later phase's work inside the current phase instead of adding a new phase and planning it separately.
+- **Speculative abstraction** — a helper, layer, option, or dependency built for a caller that does not exist.
+- **Copy-paste duplication** — a second copy of logic where the existing helper or a small extraction fits.
+- **Comment narration** — comments that repeat what the code says or record the change instead of explaining why.
+- **Test theater** — tautological tests that restate the implementation, repeat another test's assertion, or pass when the behavior breaks.
 
 ## Files
 

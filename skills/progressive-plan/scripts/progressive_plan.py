@@ -39,6 +39,7 @@ MASTER_HEADINGS = [
     "Goal flow",
     "Definition of done",
     "Non-goals",
+    "Code standards",
     "Current state",
     "Phase map",
     "Cross-phase decisions",
@@ -56,6 +57,7 @@ PHASE_HEADINGS = [
     "Entry conditions",
     "Steps",
     "Phase acceptance criteria",
+    "Code standards check",
     "Deviations and working notes",
     "Closeout",
 ]

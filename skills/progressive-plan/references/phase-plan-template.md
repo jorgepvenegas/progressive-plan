@@ -73,16 +73,24 @@ If a step reveals work outside this phase, report it and continue the approved s
 - [ ] A1 — <observable result> — verify: `<command or observation>`
 - [ ] A2 — <observable result> — verify: `<command or observation>`
 
-## 7. Risks and unknowns
+## 7. Code standards check
+
+- [ ] The diff is the smallest change that meets the acceptance criteria; no speculative abstraction, unused code, or new dependency
+- [ ] Existing helpers are reused where they fit; duplication the change creates is removed without adding a framework for two similar lines
+- [ ] Names and structure state intent; comments explain only non-obvious reasons
+- [ ] Every new test fails if the behavior it covers breaks; no test restates the implementation
+- [ ] Master standards commands pass: `<format>`, `<lint>`, `<type check>`, `<tests>`
+
+## 8. Risks and unknowns
 
 | Risk | Likelihood | Impact | Mitigation or check |
 |---|---|---|---|
 
-## 8. Deviations and working notes
+## 9. Deviations and working notes
 
 Append during implementation. One line per deviation: date, step, what changed, why, approval if needed. A deviation records an approved adjustment; it must not be used to add out-of-scope work.
 
-## 9. Closeout
+## 10. Closeout
 
 Fill at the end of every implementation session. Do not mark the phase done until this section is complete and the master is updated.
 

@@ -26,11 +26,19 @@ Scope fence:
 - Do not weaken or delete tests or acceptance criteria.
 - If you discover work that is not required to meet this phase's acceptance criteria, report it as a discovery and continue the approved steps; do not implement it, do not add files for it, and do not count it as done work in this phase. If it blocks this phase, stop and report the gap.
 
+Code standards:
+- Make the smallest change that meets each step's acceptance criteria. Do not add speculative abstraction, unused code, a new dependency, or an option with no caller.
+- Reuse an existing helper or pattern where it fits. Remove duplication the change creates, without building a framework for two similar lines.
+- Names and structure state intent. Comments explain a non-obvious reason, not what the code does. No dead or commented-out code.
+- Tests assert observable behavior, not implementation details. Do not add a test that restates the code, repeats another test's assertion, or passes when the behavior breaks.
+- Run the master's standards commands: <format>, <lint>, <type check>, <tests>. Report a rule you cannot meet; do not weaken it.
+- Leave unrelated code, formatting, names, and dependencies unchanged.
+
 Work:
 1. Read the master plan, phase plan, and prior discoveries applied table.
 2. Implement one step at a time. Run that step's verification and record the command and a one-line result in the phase plan.
-3. Run the phase verification and the relevant full test suite.
-4. Fill the phase plan's Closeout section: verdict, steps complete, verification run, coverage table, discoveries, and remaining work.
+3. Run the phase verification, the master's standards commands, and the relevant full test suite.
+4. Fill the phase plan's Code standards check and Closeout sections: verdict, steps complete, verification run, coverage table, discoveries, and remaining work.
 5. Commit the phase:
    git add -A
    git commit -m "P<n>: <phase name>"
@@ -40,6 +48,7 @@ Work:
    - phase criteria met and evidence
    - master DoD items advanced (partial is expected until the final phase)
    - discoveries no earlier plan predicted, each with a type: `phase-amend` (required for this phase), `next-phase-amend`, `new-phase` (separate outcome), or `note`
+   - standards checks passed, and any exception with its reason
    - commit hash
    - remaining work or blocker
 

@@ -53,6 +53,7 @@ Reconcile these pairs:
 | Phase `done` | Does the recorded commit exist? Is it an ancestor of HEAD? Is the closeout verdict valid? |
 | Working tree clean | Does `git status` agree? If dirty, identify which phase the changes belong to. |
 | Tests pass | Run the phase verification before trusting old evidence. |
+| Standards check clean | Run the master's standards commands and read the phase plan's `Code standards check`. |
 | Discoveries applied | Does the phase plan list every ledger row whose `Affects` includes it? |
 | Commit recorded | Does `Commit:` name a real commit, and does `Implemented by` name the worker or a recorded exception? |
 | Plan branch | Does `git branch --show-current` match the master `Branch:` field? If the master has no `Branch:` field, report the current branch; do not create a branch mid-plan without asking. |
@@ -71,6 +72,8 @@ The required sections and their order are in `../progressive-plan/references/mas
 4. Set `Validated against master version` to the new version in every `ready` or `in_progress` phase plan.
 5. Add a `master-amend` discovery row with `Affects: all` and the reason.
 6. Re-run `check`.
+
+For a missing `Code standards`, add the table from the master template and record the project's real format, lint, type-check, and test commands; write `none` only for a check the project does not have.
 
 Do not present a phase for approval or spawn a worker while `check` fails.
 

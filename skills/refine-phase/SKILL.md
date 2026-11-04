@@ -45,8 +45,8 @@ Classify the feedback:
 
 | Level | Examples | Where it lands |
 |---|---|---|
-| Phase-local | steps, file list, acceptance wording, test plan, risks, step order, rollback | the phase plan |
-| Master | objective, goal flow, definition of done, non-goals, phase map, cross-phase decision | `master.md`, then every affected phase plan |
+| Phase-local | steps, file list, acceptance wording, verification, code standards check, risks, step order, rollback | the phase plan |
+| Master | objective, goal flow, definition of done, non-goals, code standards, phase map, cross-phase decision | `master.md`, then every affected phase plan |
 | Contract | user-visible feature behavior, CSV format, API shape, data model | stop and confirm with the user before editing |
 
 If the feedback points out a defect in the current plan, record it as a plan defect. Do not silently rewrite the history that produced it.
@@ -59,7 +59,7 @@ If `check` fails because the master predates a required section such as `Goal fl
 
 ### Phase-local changes
 
-- Update only the affected sections: objective, traceability, scope, entry conditions, steps, acceptance criteria, test plan, or risks.
+- Update only the affected sections: objective, traceability, scope, entry conditions, steps, acceptance criteria, code standards check, or risks.
 - Keep every phase acceptance criterion traced to a master definition-of-done item.
 - If an acceptance criterion changes, update the traceability table and any master coverage claim it supports.
 - Add new constraints from the user to scope, entry conditions, or risks, so the implementer sees them.
@@ -154,6 +154,7 @@ If the user pauses or rejects without actionable feedback, keep the phase `draft
 - **No version inflation.** Bump versions for semantic changes, not typos.
 - **No default-branch implementation.** Work on `plan/<slug>`; do not switch branches silently.
 - **No scope absorption.** New outcomes become new phases, not extra steps in the phase under review.
+- **No weakened quality gates.** Do not drop standards checks, tests, or acceptance criteria to make a plan approvable.
 - **No PR without consent.** At plan completion, offer the draft PR; do not push or open it without explicit approval.
 
 ## Files

@@ -45,6 +45,7 @@ Record each item; write `unknown` when the source does not say:
 Before asking gap questions, check:
 
 - `AGENTS.md`, `CLAUDE.md`, and `README.md`.
+- Tooling config that defines standards: `pyproject.toml`, `package.json`, `Makefile`, lint/format/type config, and CI workflows.
 - The current `master.md`, phase plans, and discovery ledger.
 - The code and tests that the issue would change.
 - Recent git history and the current branch.
