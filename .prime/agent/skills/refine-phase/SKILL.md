@@ -127,15 +127,16 @@ Only after the user explicitly approves:
    python3 <plan-orchestrator-dir>/scripts/plan_orchestrator.py approve docs/plans/<slug> P<n> --by "<user>"
    ```
 
-2. Set `Status: in_progress` in the phase plan and the master row to `in_progress`.
-3. Run `check` again.
-4. Spawn one subagent with `plan-orchestrator/references/worker-prompt-template.md`, filled with:
+2. Verify the plan branch. `git branch --show-current` must match the master `Branch:` field (`plan/<slug>`). If the master has no `Branch:` field and the plan has no implementation commits, create or switch to `plan/<slug>` now. If work is already in progress, report the current branch and ask before rebranching.
+3. Set `Status: in_progress` in the phase plan and the master row to `in_progress`.
+4. Run `check` again.
+5. Spawn one subagent with `plan-orchestrator/references/worker-prompt-template.md`, filled with:
    - absolute paths to `master.md` and the phase plan,
-   - the phase ID and scope fence,
+   - the phase ID, plan branch, and scope fence,
    - the approval record (`Approved by`, `Approved at`),
-   - the instruction to implement, verify, write the phase closeout, commit, and report the hash.
-5. Keep the handle. Do not implement the phase in the coordinator.
-6. Report the handoff, then follow the normal `plan-orchestrator` closeout loop: review the worker's files, tests, closeout, and commit; update the master; record the commit.
+   - the instruction to implement, verify, write the phase closeout, commit on the plan branch, and report the hash.
+6. Keep the handle. Do not implement the phase in the coordinator.
+7. Report the handoff, then follow the normal `plan-orchestrator` closeout loop: review the worker's files, tests, closeout, and commit; update the master; record the commit. When the final phase is done and all D items are met, follow the plan-orchestrator End of plan gate and offer a draft PR.
 
 If the user pauses or rejects without actionable feedback, keep the phase `draft`, record the round, and ask one focused question. If the user abandons the phase, set it `blocked` and name the reason.
 
@@ -148,6 +149,8 @@ If the user pauses or rejects without actionable feedback, keep the phase `draft
 - **No dropped discoveries.** Run `discoveries` for the current phase after ledger changes.
 - **No full rewrite for a small change.** Keep the diff reviewable.
 - **No version inflation.** Bump versions for semantic changes, not typos.
+- **No default-branch implementation.** Work on `plan/<slug>`; do not switch branches silently.
+- **No PR without consent.** At plan completion, offer the draft PR; do not push or open it without explicit approval.
 
 ## Files
 

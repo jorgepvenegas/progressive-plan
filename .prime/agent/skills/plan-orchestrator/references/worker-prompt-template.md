@@ -14,7 +14,8 @@ Approval record:
 - Approved by: <user>
 - Approved at: <YYYY-MM-DD>
 - Phase status: ready
-Do not start if the phase plan is not approved or the approval fields are missing. Report the missing approval instead.
+- Branch: plan/<slug>
+Do not start if the phase plan is not approved or the approval fields are missing. Report the missing approval instead. Work and commit on the branch above; do not create, switch, or merge branches.
 
 Scope fence:
 - Implement exactly the steps in the phase plan, in order.

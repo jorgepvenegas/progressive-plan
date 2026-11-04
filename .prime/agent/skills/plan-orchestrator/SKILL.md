@@ -23,6 +23,8 @@ docs/plans/<slug>/
 - `phases/NN-<name>/plan.md` is one phase's executable plan plus its closeout record. One phase per file.
 - Later phases stay as outlines in the master until their plan is written. Do not write every sub-plan up front; discoveries would invalidate them before use.
 
+Before scaffolding a new plan, create its branch (see Branch and PR gates).
+
 Scaffold and validate:
 
 ```bash
@@ -39,9 +41,59 @@ python3 <skill-dir>/scripts/plan_orchestrator.py status docs/plans/<slug>
 
 To resume an existing plan, run `status` first: it prints the phase table and the resume brief. Then read `master.md` and the current phase plan.
 
+## Branch and PR gates
+
+Every plan gets its own branch. All plan and phase commits land on it. When the final phase is done and the definition of done is met, offer a draft PR. Never push or open a PR without explicit approval.
+
+### Start of plan
+
+Create the branch before writing `master.md`:
+
+1. Confirm the working tree is clean with `git status --short`. If it is dirty, stop and ask what to do with the changes.
+2. Detect the default branch:
+   ```bash
+   git symbolic-ref refs/remotes/origin/HEAD --short
+   ```
+   Strip the `origin/` prefix. If that fails, use `main`, then `master`.
+3. Create `plan/<slug>` from the default branch:
+   ```bash
+   git switch -c plan/<slug> <default-branch>
+   ```
+   If the branch already exists, switch to it. Do not recreate it.
+4. Record `- Branch: plan/<slug>` in the master header.
+5. If the repository is not a git repository, record that and continue without a branch. A missing remote does not block a local branch; it only blocks the draft PR at the end.
+
+Do not create a plan branch in the middle of an existing plan. If a plan is already in progress and the current branch does not match the recorded branch, stop and report.
+
+### End of plan
+
+After the final phase is `done`, every definition-of-done item is met, any `record-commit` metadata is committed, and the working tree is clean:
+
+1. Confirm the branch and the remote:
+   ```bash
+   git branch --show-current
+   git remote -v
+   gh auth status
+   ```
+2. Offer, do not act: "The plan is complete on `plan/<slug>`. Create a draft PR to `<default-branch>`?"
+3. Only after explicit approval, push and create the draft PR:
+   ```bash
+   git push -u origin plan/<slug>
+   gh pr create --draft --base <default-branch> --head plan/<slug> \
+     --title "<plan title>" --body-file <temp-file>
+   ```
+4. Write the PR body from the master, not from conversation. Include the objective, the definition-of-done checklist with verdicts, the phase table, verification commands and results, known issues and risks, and the plan directory path.
+5. Record the PR URL in the master resume brief and report it.
+
+If `gh` is missing, unauthenticated, or there is no remote, report the limitation and leave the branch pushed or local as the user prefers. Do not fail the plan closeout.
+
+**Plans that predate this rule.** If the master has no `Branch:` field and work already landed on the default branch, do not push the default branch or open a PR from it. Report the state and ask whether to create a retrospective branch. Do not rewrite history.
+
 ## The loop
 
 ### 1. Research, then write the master plan
+
+Create the plan branch first (see Branch and PR gates), then research.
 
 Do not write the master plan from the request alone. Read `AGENTS.md`/`CLAUDE.md`, the README, contributor docs, and the code and tests the work touches. Run the baseline build or tests. Record exact commands and results.
 
@@ -169,7 +221,7 @@ A phase is not done because its steps are done. It is done when the master plan 
 
 ### 5. Commit the phase
 
-A phase is not wrapped up until its work is committed. Do this after the closeout updates are written and verified, and before any next-phase work.
+A phase is not wrapped up until its work is committed. Do this after the closeout updates are written and verified, and before any next-phase work. Confirm you are on `plan/<slug>` with `git branch --show-current`; never commit phase work to the default branch.
 
 1. Review the diff and the ignored files:
    ```bash
@@ -197,6 +249,8 @@ If the session ends `partial` or `blocked`, commit a WIP checkpoint with the sam
 
 Update the resume brief in the master: current phase, last verdict, next action, open decisions. Write the next phase plan only when the previous phase is closed, then stop at the approval gate and ask the user. The next session starts with the `plan-resume` skill, which reads the master plan, the current phase plan, the git state, and the recorded commit; do not rely on conversation history that a later session will not have.
 
+When the final phase is `done` and every definition-of-done item is met, follow the End of plan gate in Branch and PR gates: ask whether to push and open a draft PR. Record the answer and the PR URL in the master.
+
 ## User-facing closeout report
 
 End every closeout with a short report in this shape:
@@ -208,6 +262,7 @@ Master coverage: D1 met (<evidence>), D2 partial (<gap>), D3 not started
 Discoveries no earlier plan predicted: <one line each, or "none">
 Plan updates: master v3 (<rows/sections changed>); P3 plan v2 (<sections changed>)
 Commit: <short hash>
+Branch: plan/<slug>
 Next action: <one concrete action>
 ```
 
@@ -243,6 +298,8 @@ Subagent implementation is mandatory for every approved phase. The coordinator h
 - **Approval by assumption** — treating silence, a prior "keep going", approval of the master plan, or approval of an earlier phase as approval of the current phase.
 - **Approval theater** — marking a phase `ready` without running the approval command and recording who approved it.
 - **Uncommitted closeout** — marking a phase done with no commit or no recorded commit hash.
+- **Default-branch implementation** — implementing a plan on the default branch instead of its `plan/<slug>` branch.
+- **PR without consent** — pushing a branch or opening a draft PR before the user explicitly agrees.
 
 ## Files
 

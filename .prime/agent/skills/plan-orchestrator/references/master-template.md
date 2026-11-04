@@ -6,6 +6,7 @@
 - Created: {{DATE}}
 - Owner: <coordinator agent or user>
 - Plan directory: `docs/plans/{{SLUG}}`
+- Branch: `plan/{{SLUG}}`
 
 ## 1. Objective
 
@@ -74,4 +75,5 @@ Every row must have an `Affects` value: `all`, one phase ID, or a comma-separate
 - Last verdict: <addressed | partial | blocked | none>
 - Next action: <one concrete action>
 - Open decisions: <IDs or none>
+- PR: <none | draft PR URL>
 - Last updated: {{DATE}}

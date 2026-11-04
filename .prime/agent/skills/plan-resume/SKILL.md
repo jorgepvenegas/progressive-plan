@@ -55,6 +55,7 @@ Reconcile these pairs:
 | Tests pass | Run the phase verification before trusting old evidence. |
 | Discoveries applied | Does the phase plan list every ledger row whose `Affects` includes it? |
 | Commit recorded | Does `Commit:` name a real commit, and does `Implemented by` name the worker or a recorded exception? |
+| Plan branch | Does `git branch --show-current` match the master `Branch:` field? If the master has no `Branch:` field, report the current branch; do not create a branch mid-plan without asking. |
 
 Never discard uncommitted work to make the state look clean. If the dirty files belong to the current phase, treat them as in-progress work. If they belong to a later phase, stop and report the out-of-order change.
 
@@ -81,6 +82,7 @@ Once the state is reconciled:
 - **Never write product code in the coordinator.** Spawn a subagent with `references/worker-prompt-template.md` from `plan-orchestrator`, including the approval record.
 - **Never mark a phase done without evidence.** Run the verification commands; do not trust a stale closeout.
 - **Never skip the commit gate.** A `done` phase needs a real commit hash recorded in the phase plan and master.
+- **Never implement on the default branch.** Work on `plan/<slug>` when the master records it. If the plan predates the branch field and work is already in progress, report the current branch instead of rebranching silently.
 - **Never drop discoveries.** Run `plan_orchestrator.py discoveries <plan-dir> <phase>` and compare it with the phase plan's `Prior discoveries applied` table.
 - **Do not start the next phase because it looks easy.** Close the current phase and stop at the next approval gate.
 
@@ -94,6 +96,7 @@ Master: v<n>, <status>
 Current phase: P<n> — <name> (<status>)
 Approval: approved by <user> on <date> | pending
 Commit: <hash> | none
+Branch: plan/<slug> | <current branch> | none
 Working tree: clean | <n> files (list)
 Verification from this session: <command> — <result>
 Next legal action: <one action>
@@ -111,6 +114,7 @@ Lead with whether the phase is approved, in progress, or done. Do not bury a pen
 - **Skipping the subagent mandate** — the coordinator implementing the phase itself.
 - **Skipping the commit gate** — marking a phase done without a real recorded commit.
 - **Discovery loss** — starting the next phase without checking the master ledger and `Prior discoveries applied`.
+- **Default-branch implementation** — resuming work on the default branch when the plan records a `plan/<slug>` branch.
 
 ## Files
 
