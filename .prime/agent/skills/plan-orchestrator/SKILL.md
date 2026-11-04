@@ -195,7 +195,7 @@ If the session ends `partial` or `blocked`, commit a WIP checkpoint with the sam
 
 ### 6. Hand off cleanly
 
-Update the resume brief in the master: current phase, last verdict, next action, open decisions. Write the next phase plan only when the previous phase is closed, then stop at the approval gate and ask the user. The next session starts by reading the master plan and the resume brief, then the approved phase plan. Do not rely on conversation history that a later session will not have.
+Update the resume brief in the master: current phase, last verdict, next action, open decisions. Write the next phase plan only when the previous phase is closed, then stop at the approval gate and ask the user. The next session starts with the `plan-resume` skill, which reads the master plan, the current phase plan, the git state, and the recorded commit; do not rely on conversation history that a later session will not have.
 
 ## User-facing closeout report
 
@@ -250,3 +250,4 @@ Subagent implementation is mandatory for every approved phase. The coordinator h
 - `references/phase-plan-template.md` — phase sub-plan and closeout structure.
 - `references/worker-prompt-template.md` — required prompt for the subagent that implements an approved phase.
 - `scripts/plan_orchestrator.py` — `new`, `add-phase`, `approve`, `record-commit`, `discoveries`, `check`, `status`.
+- `../plan-resume/` — the new-session resume skill; use it before editing an existing plan.
