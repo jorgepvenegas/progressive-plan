@@ -1,11 +1,11 @@
 ---
 name: refine-phase
-description: Refine an unapproved plan-orchestrator phase plan after the user rejects it or requests changes, then re-present it for approval and continue into delegated implementation once approved. Use when the user says no to a phase plan, asks for plan changes before approving, or wants scope, steps, acceptance criteria, files, or risks revised after plan review.
+description: Refine an unapproved progressive-plan phase plan after the user rejects it or requests changes, then re-present it for approval and continue into delegated implementation once approved. Use when the user says no to a phase plan, asks for plan changes before approving, or wants scope, steps, acceptance criteria, files, or risks revised after plan review.
 ---
 
 # Refine Phase
 
-Use this skill when a `plan-orchestrator` phase plan is written but the user does not approve it. The goal is to turn the feedback into a precise, revalidated plan, obtain explicit approval, and then hand the approved phase to a subagent.
+Use this skill when a `progressive-plan` phase plan is written but the user does not approve it. The goal is to turn the feedback into a precise, revalidated plan, obtain explicit approval, and then hand the approved phase to a subagent.
 
 Do not implement product code during refinement. The approval gate stays closed until the user explicitly approves the revised plan.
 
@@ -14,11 +14,11 @@ Do not implement product code during refinement. The approval gate stays closed 
 Run these from the repository root:
 
 ```bash
-python3 <plan-orchestrator-dir>/scripts/plan_orchestrator.py status docs/plans/<slug>
-python3 <plan-orchestrator-dir>/scripts/plan_orchestrator.py check docs/plans/<slug>
+python3 <progressive-plan-dir>/scripts/progressive_plan.py status docs/plans/<slug>
+python3 <progressive-plan-dir>/scripts/progressive_plan.py check docs/plans/<slug>
 ```
 
-Then read the current phase plan and `master.md` fresh. `<plan-orchestrator-dir>` is the sibling directory of this skill.
+Then read the current phase plan and `master.md` fresh. `<progressive-plan-dir>` is the sibling directory of this skill.
 
 ## 1. Protect the approval gate
 
@@ -46,7 +46,7 @@ Classify the feedback:
 | Level | Examples | Where it lands |
 |---|---|---|
 | Phase-local | steps, file list, acceptance wording, test plan, risks, step order, rollback | the phase plan |
-| Master | objective, definition of done, non-goals, phase map, cross-phase decision | `master.md`, then every affected phase plan |
+| Master | objective, goal flow, definition of done, non-goals, phase map, cross-phase decision | `master.md`, then every affected phase plan |
 | Contract | user-visible feature behavior, CSV format, API shape, data model | stop and confirm with the user before editing |
 
 If the feedback points out a defect in the current plan, record it as a plan defect. Do not silently rewrite the history that produced it.
@@ -54,6 +54,8 @@ If the feedback points out a defect in the current plan, record it as a plan def
 ## 3. Rewrite the plan
 
 Read `master.md` and the phase plan before editing. Apply targeted edits; do not re-plan from scratch when one section is enough.
+
+If `check` fails because the master predates a required section such as `Goal flow`, add it from `../progressive-plan/references/master-template.md` first, bump the master version, and revalidate affected phases. This is a schema repair, not a refinement of the current phase.
 
 ### Phase-local changes
 
@@ -100,8 +102,8 @@ Increment `<n>` on every round. Keep the log factual; do not narrate the convers
 Run:
 
 ```bash
-python3 <plan-orchestrator-dir>/scripts/plan_orchestrator.py check docs/plans/<slug>
-python3 <plan-orchestrator-dir>/scripts/plan_orchestrator.py status docs/plans/<slug>
+python3 <progressive-plan-dir>/scripts/progressive_plan.py check docs/plans/<slug>
+python3 <progressive-plan-dir>/scripts/progressive_plan.py status docs/plans/<slug>
 ```
 
 Present a delta, not the whole plan again:
@@ -125,19 +127,19 @@ Only after the user explicitly approves:
 1. Run the approval command:
 
    ```bash
-   python3 <plan-orchestrator-dir>/scripts/plan_orchestrator.py approve docs/plans/<slug> P<n> --by "<user>"
+   python3 <progressive-plan-dir>/scripts/progressive_plan.py approve docs/plans/<slug> P<n> --by "<user>"
    ```
 
 2. Verify the plan branch. `git branch --show-current` must match the master `Branch:` field (`plan/<slug>`). If the master has no `Branch:` field and the plan has no implementation commits, create or switch to `plan/<slug>` now. If work is already in progress, report the current branch and ask before rebranching.
 3. Set `Status: in_progress` in the phase plan and the master row to `in_progress`.
 4. Run `check` again.
-5. Spawn one subagent with `plan-orchestrator/references/worker-prompt-template.md`, filled with:
+5. Spawn one subagent with your harness's delegation mechanism and `../progressive-plan/references/worker-prompt-template.md`, filled with:
    - absolute paths to `master.md` and the phase plan,
    - the phase ID, plan branch, and scope fence,
    - the approval record (`Approved by`, `Approved at`),
    - the instruction to implement, verify, write the phase closeout, commit on the plan branch, and report the hash.
 6. Keep the handle. Do not implement the phase in the coordinator.
-7. Report the handoff, then follow the normal `plan-orchestrator` closeout loop: review the worker's files, tests, closeout, and commit; update the master; record the commit. When the final phase is done and all D items are met, follow the plan-orchestrator End of plan gate and offer a draft PR.
+7. Report the handoff, then follow the normal `progressive-plan` closeout loop: review the worker's files, tests, closeout, and commit; update the master; record the commit. When the final phase is done and all D items are met, follow the progressive-plan End of plan gate and offer a draft PR.
 
 If the user pauses or rejects without actionable feedback, keep the phase `draft`, record the round, and ask one focused question. If the user abandons the phase, set it `blocked` and name the reason.
 
@@ -157,6 +159,6 @@ If the user pauses or rejects without actionable feedback, keep the phase `draft
 ## Files
 
 - `references/master-change-propagation.md` — how to change the master and propagate to affected phases.
-- `../plan-orchestrator/SKILL.md` — approval gate, phase loop, and closeout.
-- `../plan-orchestrator/scripts/plan_orchestrator.py` — `check`, `status`, `approve`, `discoveries`.
-- `../plan-orchestrator/references/worker-prompt-template.md` — required subagent prompt.
+- `../progressive-plan/SKILL.md` — approval gate, phase loop, and closeout.
+- `../progressive-plan/scripts/progressive_plan.py` — `check`, `status`, `approve`, `discoveries`.
+- `../progressive-plan/references/worker-prompt-template.md` — required subagent prompt.

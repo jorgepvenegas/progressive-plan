@@ -8,8 +8,8 @@ Use this with `scripts/resume_status.py`. Tick every item before the first edit.
 - [ ] Resume brief read; current phase matches the phase map.
 - [ ] Master version matches every `ready`/`in_progress` phase plan's `Validated against master version`.
 - [ ] Current phase plan read in full.
-- [ ] `plan_orchestrator.py check` passes.
-- [ ] `plan_orchestrator.py discoveries <plan-dir> <phase>` run; every affecting ledger row appears in `Prior discoveries applied`.
+- [ ] `progressive_plan.py check` passes.
+- [ ] `progressive_plan.py discoveries <plan-dir> <phase>` run; every affecting ledger row appears in `Prior discoveries applied`.
 
 ## Approval and implementation
 

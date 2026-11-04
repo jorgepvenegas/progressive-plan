@@ -16,12 +16,12 @@ If `gh` is unavailable or unauthenticated, ask the user to paste the issue body 
 
 ### Linear, Jira, Notion, and other MCP-connected trackers
 
-1. Discover connections: `mcp.list_connections()`.
-2. Search tools: `mcp.search_tools("linear issue")` or the equivalent for the tracker.
-3. Inspect the schema: `mcp.describe_tool(connection_id, tool)`.
-4. Read the issue, comments, and linked documents with `mcp.call_tool(...)`.
+Use the MCP tools configured in your agent:
 
-If there is no connection, ask the user to paste the issue or export it. Do not guess field names.
+- prime-agent: discover connections with `mcp.list_connections()`, search with `mcp.search_tools(...)`, inspect a schema with `mcp.describe_tool(...)`, and read with `mcp.call_tool(...)`.
+- Claude Code and Pi: use the MCP server tools exposed by the session. List or search the available tools if your client provides discovery.
+
+Read the issue, comments, and linked documents. If there is no connection, ask the user to paste the issue or export it. Do not guess field names.
 
 ### Local files, URLs, and pasted text
 

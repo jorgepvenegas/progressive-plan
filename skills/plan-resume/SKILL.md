@@ -1,13 +1,13 @@
 ---
 name: plan-resume
-description: Resume an in-progress plan-orchestrator master plan in a new coding session. Use when starting fresh against an existing docs/plans master and phase plans, when the user says resume or continue the plan, or when a session was interrupted and the next agent must reconstruct state without re-planning.
+description: Resume an in-progress progressive-plan master plan in a new coding session. Use when starting fresh against an existing docs/plans master and phase plans, when the user says resume or continue the plan, or when a session was interrupted and the next agent must reconstruct state without re-planning.
 ---
 
 # Plan Resume
 
-Use this skill at the start of a new session against an existing `plan-orchestrator` plan. The goal is to reconstruct the exact state, verify it against the repository and git history, and continue from the next legal action. Do not re-plan from scratch and do not redo completed phases.
+Use this skill at the start of a new session against an existing `progressive-plan` plan. The goal is to reconstruct the exact state, verify it against the repository and git history, and continue from the next legal action. Do not re-plan from scratch and do not redo completed phases.
 
-The execution rules remain in `plan-orchestrator`: approval gate, subagent implementation, commit gate, and discovery propagation. This skill only gets the new session to the correct entry point.
+The execution rules remain in `progressive-plan`: approval gate, subagent implementation, commit gate, and discovery propagation. This skill only gets the new session to the correct entry point.
 
 ## Quick start
 
@@ -19,7 +19,7 @@ python3 <skill-dir>/scripts/resume_status.py docs/plans/<slug>
 
 Use `--json` when another tool needs the state, and `--phase P<n>` to inspect a specific phase.
 
-`<skill-dir>` is this skill's directory. `<plan-orchestrator-dir>` is its sibling directory. In this repository they are `.prime/agent/skills/plan-resume` and `.prime/agent/skills/plan-orchestrator`.
+`<skill-dir>` is this skill's directory. `<progressive-plan-dir>` is its sibling directory, next to this skill in the installed skills folder.
 
 ## 1. Inspect before touching code
 
@@ -27,8 +27,8 @@ Run these commands from the repository root, using the absolute plan directory:
 
 ```bash
 python3 <skill-dir>/scripts/resume_status.py docs/plans/<slug>
-python3 <plan-orchestrator-dir>/scripts/plan_orchestrator.py check docs/plans/<slug>
-python3 <plan-orchestrator-dir>/scripts/plan_orchestrator.py status docs/plans/<slug>
+python3 <progressive-plan-dir>/scripts/progressive_plan.py check docs/plans/<slug>
+python3 <progressive-plan-dir>/scripts/progressive_plan.py status docs/plans/<slug>
 ```
 
 Then read, in full:
@@ -59,6 +59,21 @@ Reconcile these pairs:
 
 Never discard uncommitted work to make the state look clean. If the dirty files belong to the current phase, treat them as in-progress work. If they belong to a later phase, stop and report the out-of-order change.
 
+### Upgrade an older master before acting
+
+`resume_status.py` runs `progressive_plan.py check`. If the check fails because an older master is missing a current required section, repair the master before choosing the next action.
+
+The required sections and their order are in `../progressive-plan/references/master-template.md`. For a missing `Goal flow`:
+
+1. Add the section after `Objective`, with a fenced `mermaid` diagram of the plan's user-visible outcome.
+2. Fill the diagram from the objective and definition of done. Keep it to the main path; no phase IDs or internal component names.
+3. Bump `Master version` by 1.
+4. Set `Validated against master version` to the new version in every `ready` or `in_progress` phase plan.
+5. Add a `master-amend` discovery row with `Affects: all` and the reason.
+6. Re-run `check`.
+
+Do not present a phase for approval or spawn a worker while `check` fails.
+
 ## 3. Choose the next action from the state
 
 | Current phase state | Next action |
@@ -74,16 +89,16 @@ Never discard uncommitted work to make the state look clean. If the dirty files 
 
 If the current phase is already implemented but not committed, finish the closeout and commit gate before starting anything new. If it is committed but the master is stale, update the master before writing the next phase.
 
-## 4. Resume the plan-orchestrator loop
+## 4. Resume the progressive-plan loop
 
 Once the state is reconciled:
 
 - **Never implement an unapproved phase.** Ask: "The P<n> plan is ready at `<path>. Approve implementation?"
-- **Never write product code in the coordinator.** Spawn a subagent with `references/worker-prompt-template.md` from `plan-orchestrator`, including the approval record.
+- **Never write product code in the coordinator.** Spawn a subagent with `../progressive-plan/references/worker-prompt-template.md`, including the approval record.
 - **Never mark a phase done without evidence.** Run the verification commands; do not trust a stale closeout.
 - **Never skip the commit gate.** A `done` phase needs a real commit hash recorded in the phase plan and master.
 - **Never implement on the default branch.** Work on `plan/<slug>` when the master records it. If the plan predates the branch field and work is already in progress, report the current branch instead of rebranching silently.
-- **Never drop discoveries.** Run `plan_orchestrator.py discoveries <plan-dir> <phase>` and compare it with the phase plan's `Prior discoveries applied` table.
+- **Never drop discoveries.** Run `progressive_plan.py discoveries <plan-dir> <phase>` and compare it with the phase plan's `Prior discoveries applied` table.
 - **Keep the phase focused.** If a closeout reports a `new-phase` discovery, verify the master phase map has that phase as `planned` and that the current phase did not implement it. Do not absorb new work into the current phase.
 - **Do not start the next phase because it looks easy.** Close the current phase and stop at the next approval gate.
 
@@ -122,4 +137,4 @@ Lead with whether the phase is approved, in progress, or done. Do not bury a pen
 
 - `scripts/resume_status.py` — prints the plan state, git state, gates, and next action as text or JSON.
 - `references/resume-checklist.md` — the manual checklist to run alongside the script.
-- `../plan-orchestrator/` — the execution skill and its templates.
+- `../progressive-plan/` — the execution skill and its templates.

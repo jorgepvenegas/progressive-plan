@@ -1,6 +1,6 @@
 # Worker prompt template
 
-Fill every angle-bracket field. Send the result as the `prompt` argument to `rlm.spawn`. Do not shorten it by reference; the worker may not have the coordinator's context.
+Fill every angle-bracket field. Send the result as the prompt to your harness's subagent mechanism (`rlm.spawn` in prime-agent, a Task in Claude Code, `pi-subagents` in Pi). Do not shorten it by reference; the worker may not have the coordinator's context.
 
 ```text
 You are implementing phase <Pn> — <phase name> for <project>.
@@ -35,7 +35,7 @@ Work:
    git add -A
    git commit -m "P<n>: <phase name>"
 6. Do not run record-commit or edit master.md; report the short hash to the coordinator.
-7. Reply with `await agent_message.send(message, receiver_role='parent')` containing:
+7. Reply through your harness's subagent result channel (in prime-agent, `await agent_message.send(message, receiver_role='parent')`; otherwise return the report as your final message) containing:
    - verdict: addressed / partial / blocked
    - phase criteria met and evidence
    - master DoD items advanced (partial is expected until the final phase)

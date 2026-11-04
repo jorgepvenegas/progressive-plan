@@ -6,7 +6,7 @@ Use this reference when refinement feedback changes the master plan, not just on
 
 The master changes when the feedback changes any of these:
 
-- the objective or the definition of done;
+- the objective, the goal flow, or the definition of done;
 - a non-goal;
 - the phase map, phase order, or phase dependencies;
 - a cross-phase decision;
@@ -21,7 +21,7 @@ If the feedback only changes a step, file list, acceptance wording, or risk insi
 3. Add or update the discovery-ledger row, including `Affects`.
 4. Update the phase map and, when relevant, the closeout history.
 5. Revalidate every affected phase plan.
-6. Run `plan_orchestrator.py check`.
+6. Run `progressive_plan.py check`.
 7. Re-present the current phase for approval.
 
 Doing the phase plans before the master leaves them validated against the wrong version.
@@ -34,7 +34,7 @@ For each phase whose plan is affected:
 - Bump `Plan version` by 1.
 - Apply the changed master item in `Master traceability`.
 - Add the ledger row to `Prior discoveries applied` and adjust the step or acceptance it changes.
-- Run `plan_orchestrator.py discoveries <plan-dir> <phase>` and confirm every returned row is present.
+- Run `progressive_plan.py discoveries <plan-dir> <phase>` and confirm every returned row is present.
 - If the change is too large for a targeted edit, set the phase `needs_replan` and state what must be rewritten.
 - Never leave a `ready` phase validated against an older master version.
 
@@ -84,5 +84,5 @@ Before re-presenting:
 - `Master version` is higher than before.
 - Every affected phase names the new master version.
 - Every ledger row has `Affects`, an action, and a status.
-- `plan_orchestrator.py check` passes.
+- `progressive_plan.py check` passes.
 - The current phase is still `draft` and unapproved until the user says otherwise.

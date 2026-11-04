@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print a resume report for an in-progress plan-orchestrator plan."""
+"""Print a resume report for an in-progress progressive-plan master plan."""
 
 from __future__ import annotations
 
@@ -178,15 +178,15 @@ def git(plan_dir: Path, *args: str) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-def orchestrator_check(plan_dir: Path) -> dict[str, object]:
+def progressive_plan_check(plan_dir: Path) -> dict[str, object]:
     script = (
         Path(__file__).resolve().parents[2]
-        / "plan-orchestrator"
+        / "progressive-plan"
         / "scripts"
-        / "plan_orchestrator.py"
+        / "progressive_plan.py"
     )
     if not script.exists():
-        return {"ok": False, "output": f"plan_orchestrator.py not found at {script}"}
+        return {"ok": False, "output": f"progressive_plan.py not found at {script}"}
     result = subprocess.run(
         [sys.executable, str(script), "check", str(plan_dir)],
         capture_output=True,
@@ -228,9 +228,9 @@ def build_report(plan_dir: Path, phase_override: str | None = None) -> dict[str,
     row = next((item for item in rows if item["id"] == phase_id), None)
 
     warnings: list[str] = []
-    check = orchestrator_check(plan_dir)
+    check = progressive_plan_check(plan_dir)
     if not check["ok"]:
-        warnings.append(f"plan_orchestrator.py check failed: {check['output']}")
+        warnings.append(f"progressive_plan.py check failed: {check['output']}")
 
     repo_root = git(plan_dir, "rev-parse", "--show-toplevel")
     branch = git(plan_dir, "rev-parse", "--abbrev-ref", "HEAD")
@@ -394,6 +394,13 @@ def build_report(plan_dir: Path, phase_override: str | None = None) -> dict[str,
                     "The phase plan is complete but unapproved. Present it to the user and ask "
                     "for explicit approval. Do not implement or spawn a worker yet."
                 )
+
+    if not check["ok"]:
+        gate = "PLAN CHECK FAILED"
+        next_action = (
+            "Fix the master or phase plan until `progressive_plan.py check` passes. "
+            "Do not approve a phase or spawn a worker."
+        )
 
     return {
         "title": title,

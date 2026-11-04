@@ -1,9 +1,9 @@
 ---
-name: plan-orchestrator
+name: progressive-plan
 description: Plan and execute coding work of any size through a master plan and phases, with issue intake, scope sizing, approval gates, subagent implementation, and closeout. Use when starting from a GitHub or Linear issue or a request, when a task needs scoping and acceptance criteria, for a small one-phase task, or for large multi-phase work with just-in-time sub-plans.
 ---
 
-# Plan Orchestrator
+# Progressive Plan
 
 Start from the source issue or request, size the work, and choose a one-phase plan for small tasks or a multi-phase master for large ones. A master plan states the outcome and splits the work into phases. Each phase gets a detailed sub-plan written just before it starts. No phase implementation begins until the user has seen that phase's plan and explicitly approved it. Every approved phase is implemented by a subagent; the coordinator plans, reviews, and closes out, but does not write product code. At the end of every implementation session, the agent proves what the master plan owed, records what no earlier plan predicted, updates the master plan, commits the phase, and only then calls the phase done.
 
@@ -28,13 +28,13 @@ Before scaffolding a new plan, create its branch (see Branch and PR gates).
 Scaffold and validate:
 
 ```bash
-python3 <skill-dir>/scripts/plan_orchestrator.py new "<Title>" --root docs/plans
-python3 <skill-dir>/scripts/plan_orchestrator.py add-phase docs/plans/<slug> "<Phase name>" --depends P1
-python3 <skill-dir>/scripts/plan_orchestrator.py approve docs/plans/<slug> P2 --by "<user>"
-python3 <skill-dir>/scripts/plan_orchestrator.py record-commit docs/plans/<slug> P2
-python3 <skill-dir>/scripts/plan_orchestrator.py discoveries docs/plans/<slug> P3
-python3 <skill-dir>/scripts/plan_orchestrator.py check docs/plans/<slug>
-python3 <skill-dir>/scripts/plan_orchestrator.py status docs/plans/<slug>
+python3 <skill-dir>/scripts/progressive_plan.py new "<Title>" --root docs/plans
+python3 <skill-dir>/scripts/progressive_plan.py add-phase docs/plans/<slug> "<Phase name>" --depends P1
+python3 <skill-dir>/scripts/progressive_plan.py approve docs/plans/<slug> P2 --by "<user>"
+python3 <skill-dir>/scripts/progressive_plan.py record-commit docs/plans/<slug> P2
+python3 <skill-dir>/scripts/progressive_plan.py discoveries docs/plans/<slug> P3
+python3 <skill-dir>/scripts/progressive_plan.py check docs/plans/<slug>
+python3 <skill-dir>/scripts/progressive_plan.py status docs/plans/<slug>
 ```
 
 `<skill-dir>` is the directory containing this `SKILL.md`. Use the repository's existing plans directory if it has one; `docs/plans` is the default.
@@ -50,7 +50,7 @@ Start here for a new request that changes the repository. Answer questions and d
 Identify where the requirement lives and read all of it:
 
 - **GitHub issue or PR:** `gh issue view <number> --comments` or `gh pr view <number> --comments`.
-- **Linear, Jira, Notion, or another tracker:** use the connected MCP tools. Discover them with `mcp.list_connections` and `mcp.search_tools`; inspect the schema with `mcp.describe_tool`; then call the read tool. If no connection exists, ask the user to paste the issue.
+- **Linear, Jira, Notion, or another tracker:** use the connected MCP tools. In prime-agent, discover them with `mcp.list_connections` and `mcp.search_tools` and inspect a schema with `mcp.describe_tool`; in Claude Code or Pi, use the configured MCP servers and search their tools. Then call the read tool. If no connection exists, ask the user to paste the issue.
 - **Local file, URL, or conversation:** read the file or ask for the text. Do not invent details from a title.
 
 Read the body, every comment, linked specs or designs, acceptance criteria, labels, priority, dependencies, and attachments. Record the source and issue ID in the master.
@@ -170,6 +170,7 @@ Ask the user only questions that change scope, behavior, acceptance, or risk. Gi
 The master plan must contain:
 
 - **Objective** — the user-visible outcome, not an activity.
+- **Goal flow** — a high-level Mermaid diagram of the user-visible outcome, for the person approving phases. Keep it to the main path; implementation detail belongs in the phase plans.
 - **Definition of done** — numbered `D1..Dn`, each observable and each with a verification command or observation.
 - **Non-goals** — adjacent work explicitly excluded.
 - **Current state** — evidence from the repository: files, symbols, baseline results, assumptions, unknowns.
@@ -183,14 +184,14 @@ Phase sizing:
 - Phases are ordered by dependency. Mark phases that are safe to run in parallel and name the shared files that make them unsafe.
 - A phase is not a step. Steps live in the phase sub-plan.
 
-Check the master before moving on: can a new agent tell when the whole task is done, which phase is next, and what each phase owes? If not, rewrite it.
+Check the master before moving on: can a new agent tell why the plan exists, when the whole task is done, which phase is next, and what each phase owes? If not, rewrite it.
 
 ### 2. Write the phase sub-plan just in time
 
 Before starting phase `Pn`, write `phases/NN-<name>/plan.md`. Do not start implementation from the master outline.
 
 - Read the master plan fresh, not from memory.
-- Apply every discovery-ledger row that affects this phase before writing steps. Run `plan_orchestrator.py discoveries <plan-dir> <phase-id>`, then list every returned row in `Prior discoveries applied` with how it changes a step or acceptance criterion. Write `None` only when the command returns none.
+- Apply every discovery-ledger row that affects this phase before writing steps. Run `progressive_plan.py discoveries <plan-dir> <phase-id>`, then list every returned row in `Prior discoveries applied` with how it changes a step or acceptance criterion. Write `None` only when the command returns none.
 - Trace every phase acceptance criterion to a master definition-of-done item, and every step to a phase criterion.
 - Give each step exact files, the intended change, falsifiable acceptance, a verification command, and rollback.
 - State entry conditions and verify them before the first edit.
@@ -203,10 +204,10 @@ Leave the phase status `draft` and the master row `planned` while the plan is be
 
 A phase may move to `ready` only after the user has seen its plan and explicitly approved it. This gate applies to every phase, including phases that look small or obvious.
 
-1. Finish the phase plan and run `check`. Keep the phase `draft` / master `planned`.
+1. Finish the phase plan and run `check`. Keep the phase `draft` / master `planned`. If `check` reports a missing master section, repair the master from `references/master-template.md` before asking for approval. Do not mark the phase ready while `check` fails.
 2. Send the user a short review request: absolute plan path, phase outcome, acceptance criteria, and the top risks. Ask directly: "Approve implementation of phase Pn?"
 3. Wait. Do not edit implementation files, set `in_progress`, or spawn a worker for that phase. If the user asks for changes instead of approving, use the `refine-phase` skill (sibling directory); keep the phase `draft` and return to this gate after the refinement.
-4. On explicit approval, run `plan_orchestrator.py approve <plan-dir> <phase-id> --by "<user>"`. This writes `Approved by` and `Approved at`, sets the phase and master row to `ready`, and validates the plan.
+4. On explicit approval, run `progressive_plan.py approve <plan-dir> <phase-id> --by "<user>"`. This writes `Approved by` and `Approved at`, sets the phase and master row to `ready`, and validates the plan.
 5. Only then set the phase `in_progress` in the master and start step 1.
 6. Approval of one phase does not approve any later phase. Repeat the gate for every phase.
 
@@ -218,11 +219,7 @@ Silence, a prior "keep going", approval of the master plan, or approval of an ea
 
 1. Confirm the approval gate passed: the phase plan has `Approved by` and `Approved at`, and both the phase and master are `ready`.
 2. Set the phase `in_progress` in the master and in the phase plan before spawning.
-3. Spawn one subagent for the phase with the prompt from `references/worker-prompt-template.md`, filled with absolute paths, the phase ID, the scope fence, and the approval record. In prime-agent:
-   ```python
-   handle = await rlm.spawn(prompt, name="p3-dashboard-ui")
-   ```
-   Admission returns a handle, not the answer. Keep the handle.
+3. Spawn one subagent for the phase with the prompt from `references/worker-prompt-template.md`, filled with absolute paths, the phase ID, the scope fence, and the approval record. Use your harness's subagent mechanism: in prime-agent, `await rlm.spawn(prompt, name="p3-dashboard-ui")`; in Claude Code, the Task tool; in Pi, the `pi-subagents` tools. Keep the handle or task ID.
 4. Wait for the worker's reply. Do not implement the phase while waiting. Do not start a second worker on the same phase or the same shared files.
 5. Review the worker's output yourself: read the changed files against the phase plan's file lists, run the phase verification, inspect the commit, and read the closeout. A silent worker is not a failed worker; verify before deciding.
 6. If the worker is blocked or wrong, send it a correction or spawn a replacement. Do not take over the implementation.
@@ -242,7 +239,7 @@ When implementation discovers more work, classify it before touching code:
 New-phase procedure:
 
 1. Record a ledger row with type `new-phase` and `Affects` set to the new phase ID (or the phase that will own it).
-2. Add the phase to the phase map with a one-line outcome and dependencies, status `planned`. Use `plan_orchestrator.py add-phase` when available, then bump the master version and set the new plan's `Validated against master version` to the new value.
+2. Add the phase to the phase map with a one-line outcome and dependencies, status `planned`. Use `progressive_plan.py add-phase` when available, then bump the master version and set the new plan's `Validated against master version` to the new value.
 3. Do not write its detailed plan until the current phase is closed, unless it must run first; in that case stop and ask the user about order.
 4. Keep the current phase's closeout scoped to its own acceptance criteria. Note the new phase ID under remaining work.
 5. Review the current diff for scope drift: changed files must match the phase plan's file lists. If the worker added out-of-scope code, stop and remove it or ask.
@@ -289,7 +286,7 @@ On the final phase, cover every definition-of-done item in the master. Any unadd
 
 **Propagation rule.** Every ledger row must record `Affects`: `all`, one phase ID, or a comma-separated list/range such as `P3–P5`. When a discovery appears, set `Affects` immediately; do not leave it blank.
 
-- Before approving a phase, run `plan_orchestrator.py discoveries <plan-dir> <phase-id>` and put every returned row in that phase plan's `Prior discoveries applied` table.
+- Before approving a phase, run `progressive_plan.py discoveries <plan-dir> <phase-id>` and put every returned row in that phase plan's `Prior discoveries applied` table.
 - `check` fails a `ready`, `in_progress`, or `done` phase that does not mention every ledger row affecting it. This is the guard against losing a discovery between phases.
 - If a returned row truly does not apply, list it with "not applicable" and the reason. Do not silently drop it.
 - When a new discovery changes the next phase, update that phase plan's table in the same closeout that records the ledger row.
@@ -328,8 +325,8 @@ A phase is not wrapped up until its work is committed. Do this after the closeou
    ```
 3. Record the commit hash in the phase plan and validate:
    ```bash
-   python3 <skill-dir>/scripts/plan_orchestrator.py record-commit docs/plans/<slug> P<n>
-   python3 <skill-dir>/scripts/plan_orchestrator.py check docs/plans/<slug>
+   python3 <skill-dir>/scripts/progressive_plan.py record-commit docs/plans/<slug> P<n>
+   python3 <skill-dir>/scripts/progressive_plan.py check docs/plans/<slug>
    ```
 4. Put the short hash in the master closeout-history row. `check` fails a `done` phase with no recorded commit.
 5. `record-commit` edits the plan files after the commit. Commit that small metadata change separately (`P<n>: record closeout commit`) or include it in the next phase's commit. Never amend the phase commit, because amending changes the hash.
@@ -368,7 +365,7 @@ Subagent implementation is mandatory for every approved phase. The coordinator h
 - Never let two agents write `master.md`, claim the same phase, or edit the same shared files.
 - Spawn the worker only after approval. The prompt must include absolute paths to `master.md` and the phase plan, the phase ID, the scope fence, the approval record (`Approved by`, `Approved at`), and the instruction to implement, verify, write the phase-plan closeout, commit, and report verdict plus discoveries.
 - Use the `references/worker-prompt-template.md` file. Do not improvise a shorter prompt that omits the approval or the scope fence.
-- In prime-agent, `rlm.spawn(prompt, name=...)` returns immediately with a handle. Results arrive through `agent_message`; the worker replies with `await agent_message.send(message, receiver_role='parent')`. Recover handles with `await rlm.list_subagents()` after a restart or compaction.
+- Use the harness's own delegation API: in prime-agent, `rlm.spawn(prompt, name=...)` returns a handle and the worker replies through `agent_message`; in Claude Code, spawn a Task; in Pi, use `pi-subagents`. Keep whatever handle, task ID, or result channel the harness returns, and recover it after a restart or compaction.
 - The worker may update its phase plan but not `master.md`. It reports master-level changes to the coordinator; the coordinator applies them and marks the phase done.
 - The worker commits the phase after closeout and reports the short hash. The coordinator verifies the hash and runs `record-commit` while updating the master.
 - Run phases in parallel only when the master says they are independent and their file sets do not collide.
@@ -401,5 +398,5 @@ Subagent implementation is mandatory for every approved phase. The coordinator h
 - `references/phase-plan-template.md` — phase sub-plan and closeout structure.
 - `references/worker-prompt-template.md` — required prompt for the subagent that implements an approved phase.
 - `references/issue-intake.md` — reading GitHub/Linear/tracker issues, extraction checklist, gap questions, and sizing examples.
-- `scripts/plan_orchestrator.py` — `new`, `add-phase`, `approve`, `record-commit`, `discoveries`, `check`, `status`.
+- `scripts/progressive_plan.py` — `new`, `add-phase`, `approve`, `record-commit`, `discoveries`, `check`, `status`.
 - `../plan-resume/` — the new-session resume skill; use it before editing an existing plan.

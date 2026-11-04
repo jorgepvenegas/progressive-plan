@@ -36,6 +36,7 @@ VALID_VERDICTS = {"addressed", "partial", "blocked"}
 
 MASTER_HEADINGS = [
     "Objective",
+    "Goal flow",
     "Definition of done",
     "Non-goals",
     "Current state",
@@ -475,6 +476,10 @@ def cmd_check(args: argparse.Namespace) -> None:
     for keyword in MASTER_HEADINGS:
         if not has_heading(master_text, keyword):
             errors.append(f"master: missing section '{keyword}'")
+
+    goal_flow = section(master_text, "Goal flow")
+    if goal_flow and "```mermaid" not in goal_flow:
+        errors.append("master: Goal flow has no Mermaid diagram")
 
     rows = phase_rows(master_text)
     if not rows:
