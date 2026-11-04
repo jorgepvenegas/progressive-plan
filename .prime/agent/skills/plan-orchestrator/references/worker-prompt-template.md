@@ -19,11 +19,12 @@ Do not start if the phase plan is not approved or the approval fields are missin
 
 Scope fence:
 - Implement exactly the steps in the phase plan, in order.
-- Change only the files listed in each step. Log any extra file change as a deviation in the phase plan.
+- Change only the files listed in each step. If another file is needed, stop and report it; the coordinator must amend the plan first. Do not add out-of-scope files.
 - Do not edit master.md; the coordinator owns it.
 - Do not change public interfaces, schemas, or acceptance criteria without reporting the gap first.
 - Do not refactor, rename, reformat, upgrade dependencies, or fix unrelated issues.
 - Do not weaken or delete tests or acceptance criteria.
+- If you discover work that is not required to meet this phase's acceptance criteria, report it as a discovery and continue the approved steps; do not implement it, do not add files for it, and do not count it as done work in this phase. If it blocks this phase, stop and report the gap.
 
 Work:
 1. Read the master plan, phase plan, and prior discoveries applied table.
@@ -38,11 +39,11 @@ Work:
    - verdict: addressed / partial / blocked
    - phase criteria met and evidence
    - master DoD items advanced (partial is expected until the final phase)
-   - discoveries no earlier plan predicted, each with a type
+   - discoveries no earlier plan predicted, each with a type: `phase-amend` (required for this phase), `next-phase-amend`, `new-phase` (separate outcome), or `note`
    - commit hash
    - remaining work or blocker
 
-If a step is wrong or impossible, stop and report the exact gap with the evidence. Do not invent a new design.
+If a step is wrong or impossible, stop and report the exact gap with the evidence. Do not invent a new design. If the gap is a separate outcome or feature, report it as a `new-phase` discovery and continue the approved steps if they are still valid; do not implement it in this phase.
 ```
 
 The coordinator must verify the worker's files, tests, closeout, and commit before marking the phase done. A silent worker is not a failed worker; inspect the output first.

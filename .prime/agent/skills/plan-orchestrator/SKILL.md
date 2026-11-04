@@ -224,8 +224,30 @@ Silence, a prior "keep going", approval of the master plan, or approval of an ea
    ```
    Admission returns a handle, not the answer. Keep the handle.
 4. Wait for the worker's reply. Do not implement the phase while waiting. Do not start a second worker on the same phase or the same shared files.
-5. Review the worker's output yourself: read the changed files, run the phase verification, inspect the commit, and read the closeout. A silent worker is not a failed worker; verify before deciding.
+5. Review the worker's output yourself: read the changed files against the phase plan's file lists, run the phase verification, inspect the commit, and read the closeout. A silent worker is not a failed worker; verify before deciding.
 6. If the worker is blocked or wrong, send it a correction or spawn a replacement. Do not take over the implementation.
+
+### Scope discipline and new work
+
+The approved phase plan is the only work authorization. The worker must not absorb unrelated work, opportunistic fixes, refactors, features, or a later phase's scope.
+
+When implementation discovers more work, classify it before touching code:
+
+| Discovery | Example | Handling |
+|---|---|---|
+| Required to meet this phase's acceptance criteria | A helper or migration the approved steps missed | `phase-amend`: the worker stops and reports; the coordinator updates the phase plan (files, steps, or acceptance as needed), revalidates, and sends the worker back. |
+| A separate outcome or feature | "We should also add CSV export" found while building import | `new-phase`: the worker reports it and continues the approved steps unless it blocks them; the coordinator adds a `planned` phase to the master and ledger; do not implement it in this phase. |
+| Invalidates the phase premise | The API cannot support the approved behavior | Stop; mark the phase `blocked` or `needs_replan`; ask the user. |
+
+New-phase procedure:
+
+1. Record a ledger row with type `new-phase` and `Affects` set to the new phase ID (or the phase that will own it).
+2. Add the phase to the phase map with a one-line outcome and dependencies, status `planned`. Use `plan_orchestrator.py add-phase` when available, then bump the master version and set the new plan's `Validated against master version` to the new value.
+3. Do not write its detailed plan until the current phase is closed, unless it must run first; in that case stop and ask the user about order.
+4. Keep the current phase's closeout scoped to its own acceptance criteria. Note the new phase ID under remaining work.
+5. Review the current diff for scope drift: changed files must match the phase plan's file lists. If the worker added out-of-scope code, stop and remove it or ask.
+
+The coordinator must not let a worker expand the phase. If the worker already made out-of-scope changes, do not accept the commit; revert the out-of-scope files and re-run verification.
 
 **Coordinator exception.** The user may explicitly approve coordinator implementation for a specific phase. Record `Implementation mode: coordinator-exception`, `Exception approved by`, and `Exception reason` in the phase plan; otherwise the phase is invalid. Approval of the plan alone is not approval of this exception.
 
@@ -262,6 +284,8 @@ On the final phase, cover every definition-of-done item in the master. Any unadd
 | `new-phase` | Work no existing phase covers | Master phase map and discovery ledger |
 | `scope-change` | Changes the user-visible contract | Stop and ask the user before proceeding |
 | `plan-defect` | An earlier plan missed a fact it should have found | Master discovery ledger; name the missed fact |
+
+`new-phase` discoveries are added to the master phase map in the same closeout with status `planned`. They are not implemented in the current phase.
 
 **Propagation rule.** Every ledger row must record `Affects`: `all`, one phase ID, or a comma-separated list/range such as `P3–P5`. When a discovery appears, set `Affects` immediately; do not leave it blank.
 
@@ -368,6 +392,8 @@ Subagent implementation is mandatory for every approved phase. The coordinator h
 - **Uncommitted closeout** — marking a phase done with no commit or no recorded commit hash.
 - **Default-branch implementation** — implementing a plan on the default branch instead of its `plan/<slug>` branch.
 - **PR without consent** — pushing a branch or opening a draft PR before the user explicitly agrees.
+- **Scope creep** — accepting unrelated work or opportunistic fixes into an approved phase.
+- **New-work absorption** — doing a later phase's work inside the current phase instead of adding a new phase and planning it separately.
 
 ## Files
 

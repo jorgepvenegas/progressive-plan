@@ -38,6 +38,15 @@ For each phase whose plan is affected:
 - If the change is too large for a targeted edit, set the phase `needs_replan` and state what must be rewritten.
 - Never leave a `ready` phase validated against an older master version.
 
+## New phase from feedback
+
+If the feedback adds a separate outcome, add a phase instead of expanding the current one:
+
+- Add a phase-map row with a one-line outcome, dependencies, and status `planned`.
+- Bump `Master version` and update affected plans' validated version.
+- Do not add the new outcome as steps in the current phase.
+- Write the new phase plan after the current phase closes, then stop at its approval gate.
+
 ## Status rules
 
 | Affected phase status | Action |

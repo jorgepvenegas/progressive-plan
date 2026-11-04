@@ -84,6 +84,7 @@ Once the state is reconciled:
 - **Never skip the commit gate.** A `done` phase needs a real commit hash recorded in the phase plan and master.
 - **Never implement on the default branch.** Work on `plan/<slug>` when the master records it. If the plan predates the branch field and work is already in progress, report the current branch instead of rebranching silently.
 - **Never drop discoveries.** Run `plan_orchestrator.py discoveries <plan-dir> <phase>` and compare it with the phase plan's `Prior discoveries applied` table.
+- **Keep the phase focused.** If a closeout reports a `new-phase` discovery, verify the master phase map has that phase as `planned` and that the current phase did not implement it. Do not absorb new work into the current phase.
 - **Do not start the next phase because it looks easy.** Close the current phase and stop at the next approval gate.
 
 ## 5. Report the resume state
@@ -115,6 +116,7 @@ Lead with whether the phase is approved, in progress, or done. Do not bury a pen
 - **Skipping the commit gate** — marking a phase done without a real recorded commit.
 - **Discovery loss** — starting the next phase without checking the master ledger and `Prior discoveries applied`.
 - **Default-branch implementation** — resuming work on the default branch when the plan records a `plan/<slug>` branch.
+- **Scope absorption** — letting a worker's out-of-scope discovery become part of the current phase instead of a new phase.
 
 ## Files
 

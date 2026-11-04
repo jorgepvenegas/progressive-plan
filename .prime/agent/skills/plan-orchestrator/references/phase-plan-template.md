@@ -44,6 +44,7 @@ In scope:
 
 Out of scope:
 - <adjacent work deferred to another phase or excluded>
+- <work discovered during implementation that is not required for this phase's acceptance criteria; report it as a new phase or next-phase amendment>
 
 ## 4. Entry conditions
 
@@ -52,6 +53,8 @@ Out of scope:
 - [ ] User approved this phase plan — verify: `Approved by` is set and status is `ready`
 
 ## 5. Steps
+
+If a step reveals work outside this phase, report it and continue the approved steps unless it blocks them. Do not add it to this plan or implement it here.
 
 ### S1 — <imperative title>
 
@@ -77,7 +80,7 @@ Out of scope:
 
 ## 8. Deviations and working notes
 
-Append during implementation. One line per deviation: date, step, what changed, why, approval if needed.
+Append during implementation. One line per deviation: date, step, what changed, why, approval if needed. A deviation records an approved adjustment; it must not be used to add out-of-scope work.
 
 ## 9. Closeout
 

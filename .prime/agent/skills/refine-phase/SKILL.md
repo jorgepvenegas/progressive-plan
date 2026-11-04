@@ -76,6 +76,7 @@ Edit `master.md` first, then propagate. Follow `references/master-change-propaga
 - drop or reorder ledger rows without an action;
 - weaken acceptance criteria just to make approval easier;
 - change user-visible behavior without confirmation;
+- add a new outcome or feature as extra steps in the current phase; new outcomes become new phases;
 - edit `master.md` for a phase-local change that does not alter it.
 
 ## 4. Record the refinement round
@@ -150,6 +151,7 @@ If the user pauses or rejects without actionable feedback, keep the phase `draft
 - **No full rewrite for a small change.** Keep the diff reviewable.
 - **No version inflation.** Bump versions for semantic changes, not typos.
 - **No default-branch implementation.** Work on `plan/<slug>`; do not switch branches silently.
+- **No scope absorption.** New outcomes become new phases, not extra steps in the phase under review.
 - **No PR without consent.** At plan completion, offer the draft PR; do not push or open it without explicit approval.
 
 ## Files
