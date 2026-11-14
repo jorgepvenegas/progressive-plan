@@ -87,15 +87,19 @@ def _cell(value: str, label: str) -> str:
     return value
 
 
-def _insert_table_row(text: str, section_keyword: str, row: str, prefix: str) -> str:
-    lines = text.splitlines()
-    start = None
-    for index, line in enumerate(lines):
-        if re.match(r"^##\s+.*" + re.escape(section_keyword), line, re.IGNORECASE):
-            start = index
-            break
+def _section_bounds(
+    lines: list[str], section_keyword: str, *, missing_message: str
+) -> tuple[int, int]:
+    start = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if re.match(r"^##\s+.*" + re.escape(section_keyword), line, re.IGNORECASE)
+        ),
+        None,
+    )
     if start is None:
-        fail(f"master plan has no {section_keyword} section")
+        fail(missing_message)
     end = next(
         (
             index
@@ -104,36 +108,78 @@ def _insert_table_row(text: str, section_keyword: str, row: str, prefix: str) ->
         ),
         len(lines),
     )
+    return start, end
+
+
+def _table_header_index(
+    lines: list[str],
+    start: int,
+    end: int,
+    header_pattern: str,
+    *,
+    missing_message: str,
+) -> int:
     header = next(
-        (
-            index
-            for index in range(start, end)
-            if re.match(r"\|\s*ID\s*\|", lines[index])
-        ),
+        (index for index in range(start, end) if re.match(header_pattern, lines[index])),
         None,
     )
     if header is None:
-        fail(f"{section_keyword} has no table header")
-    indices = [
+        fail(missing_message)
+    return header
+
+
+def _row_indices(
+    lines: list[str], start: int, end: int, prefix_pattern: str
+) -> list[int]:
+    return [
         index
-        for index in range(header + 1, end)
-        if re.match(rf"^\|\s*{prefix}\s*\|", lines[index])
+        for index in range(start, end)
+        if re.match(prefix_pattern, lines[index])
     ]
+
+
+def _split_row(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def _format_row(cells: list[str]) -> str:
+    return "| " + " | ".join(cells) + " |"
+
+
+def _join_lines(lines: list[str]) -> str:
+    return "\n".join(lines) + "\n"
+
+
+def _insert_table_row(text: str, section_keyword: str, row: str, prefix: str) -> str:
+    lines = text.splitlines()
+    start, end = _section_bounds(
+        lines,
+        section_keyword,
+        missing_message=f"master plan has no {section_keyword} section",
+    )
+    header = _table_header_index(
+        lines,
+        start,
+        end,
+        r"\|\s*ID\s*\|",
+        missing_message=f"{section_keyword} has no table header",
+    )
+    indices = _row_indices(lines, header + 1, end, rf"^\|\s*{prefix}\s*\|")
     insert_at = max(indices) + 1 if indices else header + 2
     lines.insert(insert_at, row)
-    return "\n".join(lines) + "\n"
+    return _join_lines(lines)
 
 
 def _set_phase_status(master: str, phase_id: str, status: str) -> str:
     lines = master.splitlines()
     for index, line in enumerate(lines):
         if re.match(rf"^\|\s*{re.escape(phase_id)}\s*\|", line):
-            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            cells = _split_row(line)
             if len(cells) != 6:
                 fail(f"master row for {phase_id} is malformed")
             cells[4] = status
-            lines[index] = "| " + " | ".join(cells) + " |"
-            return "\n".join(lines) + "\n"
+            lines[index] = _format_row(cells)
+            return _join_lines(lines)
     fail(f"phase {phase_id} is not in the master phase map")
 
 
@@ -527,46 +573,29 @@ def _upsert_closeout_history(
     report_link: str,
 ) -> str:
     lines = master.splitlines()
-    start = None
-    for index, line in enumerate(lines):
-        if re.match(r"^##\s+.*Closeout history", line, re.IGNORECASE):
-            start = index
-            break
-    if start is None:
-        fail("master plan has no Closeout history section")
-    end = next(
-        (
-            index
-            for index in range(start + 1, len(lines))
-            if re.match(r"^##\s+", lines[index])
-        ),
-        len(lines),
+    start, end = _section_bounds(
+        lines,
+        "Closeout history",
+        missing_message="master plan has no Closeout history section",
     )
-    header = next(
-        (
-            index
-            for index in range(start, end)
-            if re.match(r"\|\s*Phase\s*\|", lines[index])
-        ),
-        None,
+    header = _table_header_index(
+        lines,
+        start,
+        end,
+        r"\|\s*Phase\s*\|",
+        missing_message="Closeout history has no table header",
     )
-    if header is None:
-        fail("Closeout history has no table header")
     new_row = (
         f"| {phase_id} | {day} | {verdict} | {criteria} | {commit} | {report_link} |"
     )
     for index in range(header + 1, end):
         if re.match(rf"^\|\s*{re.escape(phase_id)}\s*\|", lines[index]):
             lines[index] = new_row
-            return "\n".join(lines) + "\n"
-    indices = [
-        index
-        for index in range(header + 1, end)
-        if re.match(r"^\|\s*P\d+\s*\|", lines[index])
-    ]
+            return _join_lines(lines)
+    indices = _row_indices(lines, header + 1, end, r"^\|\s*P\d+\s*\|")
     insert_at = max(indices) + 1 if indices else header + 2
     lines.insert(insert_at, new_row)
-    return "\n".join(lines) + "\n"
+    return _join_lines(lines)
 
 
 def cmd_close(args: argparse.Namespace) -> None:

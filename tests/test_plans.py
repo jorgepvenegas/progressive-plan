@@ -317,6 +317,15 @@ class ScaffoldTests(PlanTestCase):
         )
         self.assertIn("Keep this phase to one outcome.", plan_text)
 
+    def test_add_phase_preserves_insertion_order(self) -> None:
+        plan_dir = self.new_plan()
+        for name in ("First phase", "Second phase", "Third phase"):
+            self.assert_ok(
+                run_cli(self.tmp, "add-phase", str(plan_dir), name, "--outline")
+            )
+        ids = [row["id"] for row in planlib.phase_rows(self.master(plan_dir))]
+        self.assertEqual(ids, ["P1", "P2", "P3"])
+
 
 class ApprovalTests(PlanTestCase):
     def test_approve_refuses_empty_template(self) -> None:
