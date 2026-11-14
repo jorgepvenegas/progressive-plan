@@ -38,11 +38,11 @@ Work:
 1. Read the master plan, phase plan, and prior discoveries applied table.
 2. Implement one step at a time. Run that step's verification and record the command and a one-line result in the phase plan.
 3. Run the phase verification, the master's standards commands, and the relevant full test suite.
-4. Fill the phase plan's Code standards check and Closeout sections: verdict, steps complete, verification run, coverage table, discoveries, and remaining work.
+4. Fill the phase plan's Code standards check and Closeout sections: verdict, steps complete, verification run, coverage table, discoveries, and remaining work. Set `Implemented by` to your worker name or ID and `Implemented at` to the implementation date.
 5. Commit the phase:
    git add -A
    git commit -m "P<n>: <phase name>"
-6. Do not run record-commit or edit master.md; report the short hash to the coordinator.
+6. Do not run record-commit, close, or edit master.md; report the short hash to the coordinator. The coordinator records the commit and closes the phase.
 7. Reply through your harness's subagent result channel (in prime-agent, `await agent_message.send(message, receiver_role='parent')`; otherwise return the report as your final message) containing:
    - verdict: addressed / partial / blocked
    - phase criteria met and evidence
