@@ -50,6 +50,8 @@ Run these from the repository root. Each command is `python3 <skill-dir>/scripts
 
 `check` fails an unfilled `ready` or `done` plan. `--strict` turns warnings into errors for CI. `--json` is available on `check`, `status`, `scope`, and `report`.
 
+`add-phase` appends a row and assigns the next phase ID. IDs are creation order; the `Depends on` column is the execution order. Add phases in dependency order, or edit the phase map to reorder them deliberately.
+
 To resume an existing plan, run `status` first, then `plan-resume`. Read `master.md` and the current phase plan.
 
 ## Task intake and sizing
@@ -428,6 +430,7 @@ The full list is in `references/failure-modes.md`. The most damaging are:
 - `references/phase-plan-template.md` — phase sub-plan and closeout structure.
 - `references/worker-prompt-template.md` — required prompt for the subagent that implements an approved phase.
 - `references/issue-intake.md` — reading GitHub/Linear/tracker issues, extraction checklist, gap questions, and sizing examples.
+- `references/example-plan.md` — a filled small one-phase plan.
 - `references/gates.md` — the shared approval, delegation, closeout, commit, and PR gates.
 - `references/failure-modes.md` — the full failure-mode checklist.
 - `scripts/progressive_plan.py` — `new`, `add-phase`, `write-plan`, `approve`, `reopen`, `record-commit`, `close`, `add-discovery`, `add-decision`, `discoveries`, `scope`, `report`, `check`, `status`.

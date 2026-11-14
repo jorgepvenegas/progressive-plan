@@ -50,6 +50,8 @@ flowchart TD
 
 `approve` validates the plan content before recording approval. It refuses a plan that still contains template placeholders, has no steps or acceptance criteria, or omits an affecting discovery. `close` is the only transition that marks a phase done; it requires an `addressed` closeout, a `met` row for every criterion and claimed definition-of-done item, a checked code-standards list, an implementer, and a real commit. `check --strict` turns warnings into errors for CI.
 
+`new --size small` uses compact master and phase templates. All sizes keep the same required sections and gates.
+
 ## Commands
 
 ```bash
