@@ -50,6 +50,219 @@ class PlanTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
+class ParserTests(unittest.TestCase):
+    def test_phase_rows_well_formed_and_malformed(self) -> None:
+        master = """## Phase map
+
+| ID | Phase | Outcome | Depends on | Status | Plan |
+|---|---|---|---|---|---|
+| P1 | Build | Add behavior | none | ready | [plan](p1) |
+| P9 | Broken |"""
+        self.assertEqual(
+            planlib.phase_rows(master),
+            [
+                {
+                    "id": "P1",
+                    "name": "Build",
+                    "outcome": "Add behavior",
+                    "depends": "none",
+                    "status": "ready",
+                    "plan": "[plan](p1)",
+                    "malformed": False,
+                    "raw": "| P1 | Build | Add behavior | none | ready | [plan](p1) |",
+                },
+                {
+                    "id": "P9",
+                    "name": "Broken",
+                    "outcome": "",
+                    "depends": "",
+                    "status": "",
+                    "plan": "",
+                    "malformed": True,
+                    "raw": "| P9 | Broken |",
+                },
+            ],
+        )
+
+    def test_ledger_rows_well_formed_and_malformed(self) -> None:
+        master = """## Discovery ledger
+
+| ID | Date | Phase | Affects | Discovery | Type | Action taken | Status |
+|---|---|---|---|---|---|---|---|
+| L1 | 2026-11-14 | P1 | P1 | Found a constraint | note | Recorded | open |
+| L9 | 2026-11-14 | P1 | P1 | Broken | note |"""
+        self.assertEqual(
+            planlib.ledger_rows(master),
+            [
+                {
+                    "id": "L1",
+                    "date": "2026-11-14",
+                    "phase": "P1",
+                    "affects": "P1",
+                    "discovery": "Found a constraint",
+                    "type": "note",
+                    "action": "Recorded",
+                    "status": "open",
+                    "malformed": False,
+                    "raw": "| L1 | 2026-11-14 | P1 | P1 | Found a constraint | note | Recorded | open |",
+                },
+                {
+                    "id": "L9",
+                    "date": "2026-11-14",
+                    "phase": "P1",
+                    "affects": "P1",
+                    "discovery": "Broken",
+                    "type": "note",
+                    "action": "",
+                    "status": "",
+                    "malformed": True,
+                    "raw": "| L9 | 2026-11-14 | P1 | P1 | Broken | note |",
+                },
+            ],
+        )
+
+    def test_decision_rows_well_formed_and_malformed(self) -> None:
+        master = """## Cross-phase decisions
+
+| ID | Date | Decision | Reason | Affects |
+|---|---|---|---|---|
+| C1 | 2026-11-14 | Use the parser | Less duplication | all |
+| C9 | 2026-11-14 | Broken |"""
+        self.assertEqual(
+            planlib.decision_rows(master),
+            [
+                {
+                    "id": "C1",
+                    "date": "2026-11-14",
+                    "decision": "Use the parser",
+                    "reason": "Less duplication",
+                    "affects": "all",
+                    "malformed": False,
+                    "raw": "| C1 | 2026-11-14 | Use the parser | Less duplication | all |",
+                },
+                {
+                    "id": "C9",
+                    "date": "2026-11-14",
+                    "decision": "Broken",
+                    "reason": "",
+                    "affects": "",
+                    "malformed": True,
+                    "raw": "| C9 | 2026-11-14 | Broken |",
+                },
+            ],
+        )
+
+    def test_closeout_history_rows_well_formed_and_malformed(self) -> None:
+        master = """## Closeout history
+
+| Phase | Date | Verdict | Criteria met | Commit | Report |
+|---|---|---|---|---|---|
+| P1 | 2026-11-14 | addressed | A1 | abc1234 | [report](p1) |
+| P9 | 2026-11-15 | partial | A1 |"""
+        self.assertEqual(
+            planlib.closeout_history_rows(master),
+            [
+                {
+                    "phase": "P1",
+                    "date": "2026-11-14",
+                    "verdict": "addressed",
+                    "criteria": "A1",
+                    "commit": "abc1234",
+                    "report": "[report](p1)",
+                    "malformed": False,
+                },
+                {
+                    "phase": "P9",
+                    "date": "2026-11-15",
+                    "verdict": "partial",
+                    "criteria": "A1",
+                    "commit": "",
+                    "report": "",
+                    "malformed": True,
+                },
+            ],
+        )
+
+    def test_definition_items_checked_unchecked_verify(self) -> None:
+        master = """## Definition of done
+
+- [x] D1 — The command prints ok — verify: `python3 -c "print('ok')"`
+- [ ] D2 — The command is tested
+- [X] D3 — The command is documented — verify: `readme exists`"""
+        self.assertEqual(
+            planlib.definition_items(master),
+            [
+                {
+                    "id": "D1",
+                    "checked": True,
+                    "text": 'The command prints ok — verify: `python3 -c "print(\'ok\')"`',
+                    "verify": '`python3 -c "print(\'ok\')"`',
+                },
+                {
+                    "id": "D2",
+                    "checked": False,
+                    "text": "The command is tested",
+                    "verify": "",
+                },
+                {
+                    "id": "D3",
+                    "checked": True,
+                    "text": "The command is documented — verify: `readme exists`",
+                    "verify": "`readme exists`",
+                },
+            ],
+        )
+
+    def test_acceptance_items_checked_unchecked_verify(self) -> None:
+        plan = """## Phase acceptance criteria
+
+- [x] A1 — The command prints ok — verify: `python3 -c "print('ok')"`
+- [ ] A2 — The command is tested
+- [X] A3 — The command is documented — verify: `readme exists`"""
+        self.assertEqual(
+            planlib.acceptance_items(plan),
+            [
+                {
+                    "id": "A1",
+                    "checked": True,
+                    "text": 'The command prints ok — verify: `python3 -c "print(\'ok\')"`',
+                    "verify": '`python3 -c "print(\'ok\')"`',
+                },
+                {
+                    "id": "A2",
+                    "checked": False,
+                    "text": "The command is tested",
+                    "verify": "",
+                },
+                {
+                    "id": "A3",
+                    "checked": True,
+                    "text": "The command is documented — verify: `readme exists`",
+                    "verify": "`readme exists`",
+                },
+            ],
+        )
+
+    def test_closeout_verdict_with_and_without_verdict(self) -> None:
+        plan = """## Closeout
+
+- Verdict: Addressed
+- Steps complete: S1
+"""
+        self.assertEqual(planlib.closeout_verdict(plan), "addressed")
+        self.assertIsNone(
+            planlib.closeout_verdict("""## Closeout
+
+- Steps complete: S1
+""")
+        )
+
+    def test_identifier_number(self) -> None:
+        self.assertEqual(planlib.identifier_number("P12"), 12)
+        self.assertEqual(planlib.identifier_number("L7"), 7)
+        self.assertEqual(planlib.identifier_number("master"), 0)
+
+
 class ScaffoldTests(PlanTestCase):
     def test_new_records_root_and_size(self) -> None:
         plan_dir = self.new_plan()
@@ -104,6 +317,15 @@ class ScaffoldTests(PlanTestCase):
         )
         self.assertIn("Keep this phase to one outcome.", plan_text)
 
+    def test_add_phase_preserves_insertion_order(self) -> None:
+        plan_dir = self.new_plan()
+        for name in ("First phase", "Second phase", "Third phase"):
+            self.assert_ok(
+                run_cli(self.tmp, "add-phase", str(plan_dir), name, "--outline")
+            )
+        ids = [row["id"] for row in planlib.phase_rows(self.master(plan_dir))]
+        self.assertEqual(ids, ["P1", "P2", "P3"])
+
 
 class ApprovalTests(PlanTestCase):
     def test_approve_refuses_empty_template(self) -> None:
@@ -142,6 +364,19 @@ class ApprovalTests(PlanTestCase):
             run_cli(self.tmp, "add-phase", str(plan_dir), "First phase", "--outline")
         )
         self.assertIn("Master version: 2", self.master(plan_dir))
+
+    def test_missing_master_version_fails(self) -> None:
+        plan_dir = self.new_plan()
+        master = self.master(plan_dir).replace("- Master version: 1\n", "", 1)
+        (plan_dir / "master.md").write_text(master, encoding="utf-8")
+        result = run_cli(
+            self.tmp, "add-phase", str(plan_dir), "First phase", "--outline"
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "master plan has no '- Master version: N' line",
+            result.stdout + result.stderr,
+        )
 
     def test_add_phase_rejects_unknown_dependency(self) -> None:
         plan_dir = self.new_plan()
@@ -283,6 +518,28 @@ class DiscoveryTests(PlanTestCase):
         self.assertIn("| C1 |", master)
         self.assertIn("Master version: 2", master)
 
+    def test_add_discovery_no_bump_skips_version_and_warning(self) -> None:
+        plan_dir = make_valid_plan(self.tmp, "ready")
+        result = run_cli(
+            self.tmp,
+            "add-discovery",
+            str(plan_dir),
+            "P1",
+            "Found a constraint",
+            "--affects",
+            "P1",
+            "--type",
+            "note",
+            "--action",
+            "Recorded",
+            "--no-bump",
+        )
+        self.assert_ok(result)
+        self.assertIn("Master version: 1", self.master(plan_dir))
+        self.assertNotIn(
+            "warning: master version bumped", result.stdout + result.stderr
+        )
+
 
 class CommitAndCloseTests(PlanTestCase):
     def test_record_commit_rejects_wrong_head_subject(self) -> None:
@@ -293,6 +550,28 @@ class CommitAndCloseTests(PlanTestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("does not look like the P1 commit", result.stdout + result.stderr)
+
+    def test_record_commit_rejects_non_ancestor_commit(self) -> None:
+        init_git(self.tmp)
+        subprocess.run(["git", "checkout", "-b", "side"], cwd=self.tmp, check=True)
+        (self.tmp / "side.txt").write_text("side", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=self.tmp, check=True)
+        subprocess.run(["git", "commit", "-qm", "side"], cwd=self.tmp, check=True)
+        side_hash = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=self.tmp,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).stdout.strip()
+        subprocess.run(["git", "checkout", "-"], cwd=self.tmp, check=True)
+        plan_dir = make_valid_plan(self.tmp, "in_progress")
+        result = run_cli(
+            self.tmp, "record-commit", str(plan_dir), "P1", "--hash", side_hash
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("is not an ancestor of HEAD", result.stdout + result.stderr)
 
     def test_record_commit_accepts_phase_commit(self) -> None:
         init_git(self.tmp)
@@ -310,7 +589,7 @@ class CommitAndCloseTests(PlanTestCase):
         self.assert_ok(run_cli(self.tmp, "check", str(plan_dir)))
 
     def _close_ready(self, *, break_standards: bool = False) -> tuple[Path, str]:
-        head = init_git(self.tmp)
+        init_git(self.tmp)
         plan_dir = make_valid_plan(self.tmp, "in_progress", dod_checked=True)
         (self.tmp / "app.py").write_text("ok\n", encoding="utf-8")
         subprocess.run(["git", "add", "-A"], cwd=self.tmp, check=True)
@@ -466,6 +745,80 @@ class ResumeAndReportTests(PlanTestCase):
                 f"small phase template missing {heading}",
             )
         self.assertIn("Risks and unknowns", planlib.PHASE_HEADINGS)
+
+
+class ValidationCharacterizationTests(PlanTestCase):
+    def test_new_plan_draft_empty_phase_map(self) -> None:
+        plan_dir = self.new_plan()
+        self.assertEqual(
+            planlib.validate_plan(plan_dir),
+            {"errors": [], "warnings": ["master: phase map is empty"]},
+        )
+
+    def test_valid_plan_ready(self) -> None:
+        plan_dir = make_valid_plan(self.tmp, "ready")
+        self.assertEqual(
+            planlib.validate_plan(plan_dir),
+            {"errors": [], "warnings": []},
+        )
+
+    def test_valid_plan_in_progress(self) -> None:
+        plan_dir = make_valid_plan(self.tmp, "in_progress")
+        self.assertEqual(
+            planlib.validate_plan(plan_dir),
+            {"errors": [], "warnings": []},
+        )
+
+    def test_malformed_phase_row(self) -> None:
+        plan_dir = self.new_plan()
+        master = self.master(plan_dir)
+        lines = master.splitlines()
+        index = next(
+            i for i, line in enumerate(lines) if line.startswith("| ID | Phase |")
+        )
+        lines.insert(index + 2, "| P1 | Broken | no plan |")
+        (plan_dir / "master.md").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8"
+        )
+        self.assertEqual(
+            planlib.validate_plan(plan_dir),
+            {
+                "errors": [
+                    "master: malformed phase row for P1; expected 6 columns (ID, Phase, Outcome, Depends on, Status, Plan)",
+                    "master: P1 has invalid status ''",
+                ],
+                "warnings": [],
+            },
+        )
+
+    def test_malformed_ledger_row(self) -> None:
+        plan_dir = self.new_plan()
+        master = self.master(plan_dir)
+        lines = master.splitlines()
+        index = next(
+            i
+            for i, line in enumerate(lines)
+            if line.startswith("| ID | Date | Phase | Affects |")
+        )
+        lines.insert(
+            index + 2,
+            "| L1 | 2026-11-14 | P1 | P99 | Found | bogus |  | open |",
+        )
+        (plan_dir / "master.md").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8"
+        )
+        self.assertEqual(
+            planlib.validate_plan(plan_dir),
+            {
+                "errors": [
+                    "master: ledger L1 affects unknown phase P99",
+                    "master: ledger L1 has invalid type 'bogus'",
+                    "master: ledger L1 has no action taken",
+                    "master: ledger L1 names unknown phase 'P1'",
+                ],
+                "warnings": ["master: phase map is empty"],
+            },
+        )
 
 
 if __name__ == "__main__":

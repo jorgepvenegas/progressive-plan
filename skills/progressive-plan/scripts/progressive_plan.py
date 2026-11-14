@@ -35,7 +35,9 @@ from planlib import (
     affecting_ledger,
     build_status,
     bump_int_field,
+    bump_master_version,
     closeout_rows,
+    closeout_verdict,
     commit_date,
     commit_exists,
     commit_is_ancestor,
@@ -47,6 +49,7 @@ from planlib import (
     field,
     git,
     git_root,
+    identifier_number,
     invalid_phase_refs,
     is_pending,
     ledger_rows,
@@ -54,12 +57,14 @@ from planlib import (
     phase_plan_path,
     phase_rows,
     read_text,
+    require_master_version,
     render_report,
     render_status_text,
     section,
     set_field,
     set_field_all,
     slugify,
+    stale_phase_ids,
     validate_plan,
     working_tree,
     write_text,
@@ -85,15 +90,28 @@ def _cell(value: str, label: str) -> str:
     return value
 
 
-def _insert_table_row(text: str, section_keyword: str, row: str, prefix: str) -> str:
-    lines = text.splitlines()
-    start = None
-    for index, line in enumerate(lines):
-        if re.match(r"^##\s+.*" + re.escape(section_keyword), line, re.IGNORECASE):
-            start = index
-            break
+def _warn_stale_phases(master: str) -> None:
+    stale = stale_phase_ids(master)
+    if stale:
+        print(
+            "warning: master version bumped; revalidate these phases: "
+            + ", ".join(stale)
+        )
+
+
+def _section_bounds(
+    lines: list[str], section_keyword: str, *, missing_message: str
+) -> tuple[int, int]:
+    start = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if re.match(r"^##\s+.*" + re.escape(section_keyword), line, re.IGNORECASE)
+        ),
+        None,
+    )
     if start is None:
-        fail(f"master plan has no {section_keyword} section")
+        fail(missing_message)
     end = next(
         (
             index
@@ -102,36 +120,78 @@ def _insert_table_row(text: str, section_keyword: str, row: str, prefix: str) ->
         ),
         len(lines),
     )
+    return start, end
+
+
+def _table_header_index(
+    lines: list[str],
+    start: int,
+    end: int,
+    header_pattern: str,
+    *,
+    missing_message: str,
+) -> int:
     header = next(
-        (
-            index
-            for index in range(start, end)
-            if re.match(r"\|\s*ID\s*\|", lines[index])
-        ),
+        (index for index in range(start, end) if re.match(header_pattern, lines[index])),
         None,
     )
     if header is None:
-        fail(f"{section_keyword} has no table header")
-    indices = [
+        fail(missing_message)
+    return header
+
+
+def _row_indices(
+    lines: list[str], start: int, end: int, prefix_pattern: str
+) -> list[int]:
+    return [
         index
-        for index in range(header + 1, end)
-        if re.match(rf"^\|\s*{prefix}\s*\|", lines[index])
+        for index in range(start, end)
+        if re.match(prefix_pattern, lines[index])
     ]
+
+
+def _split_row(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def _format_row(cells: list[str]) -> str:
+    return "| " + " | ".join(cells) + " |"
+
+
+def _join_lines(lines: list[str]) -> str:
+    return "\n".join(lines) + "\n"
+
+
+def _insert_table_row(text: str, section_keyword: str, row: str, prefix: str) -> str:
+    lines = text.splitlines()
+    start, end = _section_bounds(
+        lines,
+        section_keyword,
+        missing_message=f"master plan has no {section_keyword} section",
+    )
+    header = _table_header_index(
+        lines,
+        start,
+        end,
+        r"\|\s*ID\s*\|",
+        missing_message=f"{section_keyword} has no table header",
+    )
+    indices = _row_indices(lines, header + 1, end, rf"^\|\s*{prefix}\s*\|")
     insert_at = max(indices) + 1 if indices else header + 2
     lines.insert(insert_at, row)
-    return "\n".join(lines) + "\n"
+    return _join_lines(lines)
 
 
 def _set_phase_status(master: str, phase_id: str, status: str) -> str:
     lines = master.splitlines()
     for index, line in enumerate(lines):
         if re.match(rf"^\|\s*{re.escape(phase_id)}\s*\|", line):
-            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            cells = _split_row(line)
             if len(cells) != 6:
                 fail(f"master row for {phase_id} is malformed")
             cells[4] = status
-            lines[index] = "| " + " | ".join(cells) + " |"
-            return "\n".join(lines) + "\n"
+            lines[index] = _format_row(cells)
+            return _join_lines(lines)
     fail(f"phase {phase_id} is not in the master phase map")
 
 
@@ -148,6 +208,30 @@ def _require_plan_file(plan_dir: Path, row: dict[str, Any]) -> Path:
     if not plan_file.exists():
         fail(f"{plan_file} does not exist")
     return plan_file
+
+
+def _require_repo(plan_dir: Path) -> Path:
+    repo = git_root(plan_dir)
+    if repo is None:
+        fail(f"{plan_dir} is not inside a git repository")
+    return repo
+
+
+def _require_commit(repo: Path, commit_hash: str) -> None:
+    if not commit_exists(repo, commit_hash):
+        fail(f"commit {commit_hash} does not exist in {repo}")
+    if not commit_is_ancestor(repo, commit_hash):
+        fail(f"commit {commit_hash} is not an ancestor of HEAD")
+
+
+def _set_implemented_at(plan_text: str, repo: Path, commit_hash: str) -> str:
+    if is_pending(field(plan_text, "Implemented at")):
+        return set_field(
+            plan_text,
+            "Implemented at",
+            commit_date(repo, commit_hash) or date.today().isoformat(),
+        )
+    return plan_text
 
 
 def _commit_updates(
@@ -238,9 +322,7 @@ def cmd_add_phase(args: argparse.Namespace) -> None:
     rows = phase_rows(master)
     number = max((int(row["id"][1:]) for row in rows), default=0) + 1
     phase_id = f"P{number}"
-    version = master_version(master)
-    if version is None:
-        fail("master plan has no '- Master version: N' line")
+    version = require_master_version(master)
     new_version = version + 1
     master = set_field(master, "Master version", str(new_version))
 
@@ -279,16 +361,7 @@ def cmd_add_phase(args: argparse.Namespace) -> None:
     else:
         print(f"created {plan_dir / 'phases' / f'{number:02d}-{slugify(name)}'}/plan.md")
         print(f"added {phase_id} to {master_file}")
-    stale = [
-        item["id"]
-        for item in rows
-        if item["status"] in {"ready", "in_progress"}
-    ]
-    if stale:
-        print(
-            "warning: master version bumped; revalidate these phases: "
-            + ", ".join(stale)
-        )
+    _warn_stale_phases(master)
 
 
 def cmd_write_plan(args: argparse.Namespace) -> None:
@@ -298,9 +371,7 @@ def cmd_write_plan(args: argparse.Namespace) -> None:
         fail(f"phase {args.phase} is {row['status']}; only planned phases get a new plan")
     if str(row["plan"]).strip().lower() not in {"", "pending", "not written", "—", "-"}:
         fail(f"phase {args.phase} already has a plan: {row['plan']}")
-    version = master_version(master)
-    if version is None:
-        fail("master plan has no '- Master version: N' line")
+    version = require_master_version(master)
     number = int(row["id"][1:])
     name = row["name"]
     phase_dir = plan_dir / "phases" / f"{number:02d}-{slugify(name)}"
@@ -449,9 +520,7 @@ def cmd_record_commit(args: argparse.Namespace) -> None:
     if row["status"] not in {"in_progress", "done"}:
         fail(f"phase {args.phase} is {row['status']}; record a commit only for in_progress or done")
     plan_file = _require_plan_file(plan_dir, row)
-    repo = git_root(plan_dir)
-    if repo is None:
-        fail(f"{plan_dir} is not inside a git repository")
+    repo = _require_repo(plan_dir)
 
     commit_hash = args.hash
     if not commit_hash:
@@ -464,21 +533,13 @@ def cmd_record_commit(args: argparse.Namespace) -> None:
                 f"HEAD ({commit_hash}) does not look like the {args.phase} commit "
                 f"(subject: {subject!r}); pass --hash with the phase commit"
             )
-    if not commit_exists(repo, commit_hash):
-        fail(f"commit {commit_hash} does not exist in {repo}")
-    if not commit_is_ancestor(repo, commit_hash):
-        fail(f"commit {commit_hash} is not an ancestor of HEAD")
+    _require_commit(repo, commit_hash)
 
     plan_text = read_text(plan_file)
     plan_text = set_field_all(plan_text, "Commit", commit_hash)
     if args.by:
         plan_text = set_field(plan_text, "Implemented by", args.by)
-    if is_pending(field(plan_text, "Implemented at")):
-        plan_text = set_field(
-            plan_text,
-            "Implemented at",
-            commit_date(repo, commit_hash) or date.today().isoformat(),
-        )
+    plan_text = _set_implemented_at(plan_text, repo, commit_hash)
     write_text(plan_file, plan_text)
 
     master_text = read_text(plan_dir / "master.md")
@@ -525,46 +586,29 @@ def _upsert_closeout_history(
     report_link: str,
 ) -> str:
     lines = master.splitlines()
-    start = None
-    for index, line in enumerate(lines):
-        if re.match(r"^##\s+.*Closeout history", line, re.IGNORECASE):
-            start = index
-            break
-    if start is None:
-        fail("master plan has no Closeout history section")
-    end = next(
-        (
-            index
-            for index in range(start + 1, len(lines))
-            if re.match(r"^##\s+", lines[index])
-        ),
-        len(lines),
+    start, end = _section_bounds(
+        lines,
+        "Closeout history",
+        missing_message="master plan has no Closeout history section",
     )
-    header = next(
-        (
-            index
-            for index in range(start, end)
-            if re.match(r"\|\s*Phase\s*\|", lines[index])
-        ),
-        None,
+    header = _table_header_index(
+        lines,
+        start,
+        end,
+        r"\|\s*Phase\s*\|",
+        missing_message="Closeout history has no table header",
     )
-    if header is None:
-        fail("Closeout history has no table header")
     new_row = (
         f"| {phase_id} | {day} | {verdict} | {criteria} | {commit} | {report_link} |"
     )
     for index in range(header + 1, end):
         if re.match(rf"^\|\s*{re.escape(phase_id)}\s*\|", lines[index]):
             lines[index] = new_row
-            return "\n".join(lines) + "\n"
-    indices = [
-        index
-        for index in range(header + 1, end)
-        if re.match(r"^\|\s*P\d+\s*\|", lines[index])
-    ]
+            return _join_lines(lines)
+    indices = _row_indices(lines, header + 1, end, r"^\|\s*P\d+\s*\|")
     insert_at = max(indices) + 1 if indices else header + 2
     lines.insert(insert_at, new_row)
-    return "\n".join(lines) + "\n"
+    return _join_lines(lines)
 
 
 def cmd_close(args: argparse.Namespace) -> None:
@@ -573,39 +617,24 @@ def cmd_close(args: argparse.Namespace) -> None:
     if row["status"] != "in_progress":
         fail(f"phase {args.phase} is {row['status']}; close only an in_progress phase")
     plan_file = _require_plan_file(plan_dir, row)
-    repo = git_root(plan_dir)
-    if repo is None:
-        fail(f"{plan_dir} is not inside a git repository")
+    repo = _require_repo(plan_dir)
 
     plan_text = read_text(plan_file)
     if args.hash:
-        if not commit_exists(repo, args.hash):
-            fail(f"commit {args.hash} does not exist in {repo}")
+        _require_commit(repo, args.hash)
         plan_text = set_field_all(plan_text, "Commit", args.hash)
     commit_hash = field(plan_text, "Commit")
     if is_pending(commit_hash):
         fail(f"phase {args.phase} has no recorded commit; run record-commit first")
-    if not commit_exists(repo, str(commit_hash)):
-        fail(f"commit {commit_hash} does not exist in {repo}")
-    if not commit_is_ancestor(repo, str(commit_hash)):
-        fail(f"commit {commit_hash} is not an ancestor of HEAD")
+    _require_commit(repo, str(commit_hash))
     if args.by:
         plan_text = set_field(plan_text, "Implemented by", args.by)
     if is_pending(field(plan_text, "Implemented by")):
         fail("set Implemented by with --by before closing the phase")
-    if is_pending(field(plan_text, "Implemented at")):
-        plan_text = set_field(
-            plan_text,
-            "Implemented at",
-            commit_date(repo, str(commit_hash)) or date.today().isoformat(),
-        )
+    plan_text = _set_implemented_at(plan_text, repo, str(commit_hash))
     plan_text = set_field(plan_text, "Status", "done")
 
-    closeout = section(plan_text, "Closeout")
-    verdict_match = re.search(
-        r"^-\s*Verdict:\s*(\S+)", closeout, re.MULTILINE
-    )
-    verdict = verdict_match.group(1).strip().lower() if verdict_match else ""
+    verdict = closeout_verdict(plan_text) or ""
     if verdict != "addressed":
         fail(f"phase {args.phase} verdict is '{verdict or 'missing'}'; close requires addressed")
     met = [
@@ -714,7 +743,7 @@ def cmd_add_discovery(args: argparse.Namespace) -> None:
     action = _cell(args.action, "action")
     entries = ledger_rows(master)
     number = max(
-        (int(re.sub(r"\D", "", entry["id"]) or 0) for entry in entries), default=0
+        (identifier_number(entry["id"]) for entry in entries), default=0
     ) + 1
     entry_id = f"L{number}"
     row = (
@@ -723,23 +752,11 @@ def cmd_add_discovery(args: argparse.Namespace) -> None:
     )
     master = _insert_table_row(master, "Discovery ledger", row, r"[A-Z]\d+")
     if not args.no_bump:
-        version = master_version(master)
-        if version is None:
-            fail("master plan has no '- Master version: N' line")
-        master = set_field(master, "Master version", str(version + 1))
+        master, _ = bump_master_version(master)
     write_text(master_file, master)
     print(f"added {entry_id} to {master_file}")
     if not args.no_bump:
-        stale = [
-            item["id"]
-            for item in phase_rows(master)
-            if item["status"] in {"ready", "in_progress"}
-        ]
-        if stale:
-            print(
-                "warning: master version bumped; revalidate these phases: "
-                + ", ".join(stale)
-            )
+        _warn_stale_phases(master)
 
 
 def cmd_add_decision(args: argparse.Namespace) -> None:
@@ -756,7 +773,7 @@ def cmd_add_decision(args: argparse.Namespace) -> None:
     reason = _cell(args.reason, "reason")
     rows = decision_rows(master)
     number = max(
-        (int(re.sub(r"\D", "", row["id"]) or 0) for row in rows), default=0
+        (identifier_number(row["id"]) for row in rows), default=0
     ) + 1
     decision_id = f"C{number}"
     row = (
@@ -764,22 +781,10 @@ def cmd_add_decision(args: argparse.Namespace) -> None:
         f"{reason} | {args.affects} |"
     )
     master = _insert_table_row(master, "Cross-phase decisions", row, r"C\d+")
-    version = master_version(master)
-    if version is None:
-        fail("master plan has no '- Master version: N' line")
-    master = set_field(master, "Master version", str(version + 1))
+    master, _ = bump_master_version(master)
     write_text(master_file, master)
     print(f"added {decision_id} to {master_file}")
-    stale = [
-        row["id"]
-        for row in phase_rows(master)
-        if row["status"] in {"ready", "in_progress"}
-    ]
-    if stale:
-        print(
-            "warning: master version bumped; revalidate these phases: "
-            + ", ".join(stale)
-        )
+    _warn_stale_phases(master)
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -845,9 +850,7 @@ def cmd_scope(args: argparse.Namespace) -> None:
     _master, row = _find_phase_row(plan_dir, args.phase)
     plan_file = _require_plan_file(plan_dir, row)
     expected = _plan_files(read_text(plan_file))
-    repo = git_root(plan_dir)
-    if repo is None:
-        fail(f"{plan_dir} is not inside a git repository")
+    repo = _require_repo(plan_dir)
     base = _resolve_base(plan_dir, row, args.base)
     changed = git(repo, "diff", "--name-only", f"{base}..HEAD")
     if changed is None:
