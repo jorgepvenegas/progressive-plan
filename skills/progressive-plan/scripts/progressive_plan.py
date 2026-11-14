@@ -210,6 +210,30 @@ def _require_plan_file(plan_dir: Path, row: dict[str, Any]) -> Path:
     return plan_file
 
 
+def _require_repo(plan_dir: Path) -> Path:
+    repo = git_root(plan_dir)
+    if repo is None:
+        fail(f"{plan_dir} is not inside a git repository")
+    return repo
+
+
+def _require_commit(repo: Path, commit_hash: str) -> None:
+    if not commit_exists(repo, commit_hash):
+        fail(f"commit {commit_hash} does not exist in {repo}")
+    if not commit_is_ancestor(repo, commit_hash):
+        fail(f"commit {commit_hash} is not an ancestor of HEAD")
+
+
+def _set_implemented_at(plan_text: str, repo: Path, commit_hash: str) -> str:
+    if is_pending(field(plan_text, "Implemented at")):
+        return set_field(
+            plan_text,
+            "Implemented at",
+            commit_date(repo, commit_hash) or date.today().isoformat(),
+        )
+    return plan_text
+
+
 def _commit_updates(
     files: dict[Path, str], plan_dir: Path, *, only_phase: str | None = None
 ) -> dict[str, Any]:
@@ -496,9 +520,7 @@ def cmd_record_commit(args: argparse.Namespace) -> None:
     if row["status"] not in {"in_progress", "done"}:
         fail(f"phase {args.phase} is {row['status']}; record a commit only for in_progress or done")
     plan_file = _require_plan_file(plan_dir, row)
-    repo = git_root(plan_dir)
-    if repo is None:
-        fail(f"{plan_dir} is not inside a git repository")
+    repo = _require_repo(plan_dir)
 
     commit_hash = args.hash
     if not commit_hash:
@@ -511,21 +533,13 @@ def cmd_record_commit(args: argparse.Namespace) -> None:
                 f"HEAD ({commit_hash}) does not look like the {args.phase} commit "
                 f"(subject: {subject!r}); pass --hash with the phase commit"
             )
-    if not commit_exists(repo, commit_hash):
-        fail(f"commit {commit_hash} does not exist in {repo}")
-    if not commit_is_ancestor(repo, commit_hash):
-        fail(f"commit {commit_hash} is not an ancestor of HEAD")
+    _require_commit(repo, commit_hash)
 
     plan_text = read_text(plan_file)
     plan_text = set_field_all(plan_text, "Commit", commit_hash)
     if args.by:
         plan_text = set_field(plan_text, "Implemented by", args.by)
-    if is_pending(field(plan_text, "Implemented at")):
-        plan_text = set_field(
-            plan_text,
-            "Implemented at",
-            commit_date(repo, commit_hash) or date.today().isoformat(),
-        )
+    plan_text = _set_implemented_at(plan_text, repo, commit_hash)
     write_text(plan_file, plan_text)
 
     master_text = read_text(plan_dir / "master.md")
@@ -603,32 +617,21 @@ def cmd_close(args: argparse.Namespace) -> None:
     if row["status"] != "in_progress":
         fail(f"phase {args.phase} is {row['status']}; close only an in_progress phase")
     plan_file = _require_plan_file(plan_dir, row)
-    repo = git_root(plan_dir)
-    if repo is None:
-        fail(f"{plan_dir} is not inside a git repository")
+    repo = _require_repo(plan_dir)
 
     plan_text = read_text(plan_file)
     if args.hash:
-        if not commit_exists(repo, args.hash):
-            fail(f"commit {args.hash} does not exist in {repo}")
+        _require_commit(repo, args.hash)
         plan_text = set_field_all(plan_text, "Commit", args.hash)
     commit_hash = field(plan_text, "Commit")
     if is_pending(commit_hash):
         fail(f"phase {args.phase} has no recorded commit; run record-commit first")
-    if not commit_exists(repo, str(commit_hash)):
-        fail(f"commit {commit_hash} does not exist in {repo}")
-    if not commit_is_ancestor(repo, str(commit_hash)):
-        fail(f"commit {commit_hash} is not an ancestor of HEAD")
+    _require_commit(repo, str(commit_hash))
     if args.by:
         plan_text = set_field(plan_text, "Implemented by", args.by)
     if is_pending(field(plan_text, "Implemented by")):
         fail("set Implemented by with --by before closing the phase")
-    if is_pending(field(plan_text, "Implemented at")):
-        plan_text = set_field(
-            plan_text,
-            "Implemented at",
-            commit_date(repo, str(commit_hash)) or date.today().isoformat(),
-        )
+    plan_text = _set_implemented_at(plan_text, repo, str(commit_hash))
     plan_text = set_field(plan_text, "Status", "done")
 
     verdict = closeout_verdict(plan_text) or ""
@@ -847,9 +850,7 @@ def cmd_scope(args: argparse.Namespace) -> None:
     _master, row = _find_phase_row(plan_dir, args.phase)
     plan_file = _require_plan_file(plan_dir, row)
     expected = _plan_files(read_text(plan_file))
-    repo = git_root(plan_dir)
-    if repo is None:
-        fail(f"{plan_dir} is not inside a git repository")
+    repo = _require_repo(plan_dir)
     base = _resolve_base(plan_dir, row, args.base)
     changed = git(repo, "diff", "--name-only", f"{base}..HEAD")
     if changed is None:

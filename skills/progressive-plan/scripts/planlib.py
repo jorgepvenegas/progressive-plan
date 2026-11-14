@@ -489,24 +489,22 @@ def _cycle_nodes(graph: dict[str, set[str]]) -> list[str]:
     return cycles
 
 
-def git(plan_dir: Path, *args: str) -> str | None:
-    result = subprocess.run(
+def _run_git(plan_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         ["git", "-C", str(plan_dir), *args],
         capture_output=True,
         text=True,
         encoding="utf-8",
     )
+
+
+def git(plan_dir: Path, *args: str) -> str | None:
+    result = _run_git(plan_dir, *args)
     return result.stdout.strip() if result.returncode == 0 else None
 
 
 def git_ok(plan_dir: Path, *args: str) -> bool:
-    result = subprocess.run(
-        ["git", "-C", str(plan_dir), *args],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    return result.returncode == 0
+    return _run_git(plan_dir, *args).returncode == 0
 
 
 def git_root(plan_dir: Path) -> Path | None:
@@ -1474,6 +1472,18 @@ def verification_lines(plan: str) -> list[str]:
     return lines[:10]
 
 
+def _phase_map_lines(rows: list[dict[str, Any]]) -> list[str]:
+    return [
+        f"  {row['id']:<3} {row['status']:<12} {row['name']} "
+        f"(depends: {row['depends']})"
+        for row in rows
+    ]
+
+
+def _brief_lines(brief: list[str]) -> list[str]:
+    return [f"  {line.strip()}" for line in brief if line.strip()]
+
+
 def render_resume_text(report: dict[str, Any]) -> str:
     if "error" in report:
         return f"error: {report['error']}"
@@ -1485,17 +1495,11 @@ def render_resume_text(report: dict[str, Any]) -> str:
     )
     lines.append("")
     lines.append("Phase map:")
-    for row in report["phases"]:
-        lines.append(
-            f"  {row['id']:<3} {row['status']:<12} {row['name']} "
-            f"(depends: {row['depends']})"
-        )
+    lines.extend(_phase_map_lines(report["phases"]))
     if report["resume_brief"]:
         lines.append("")
         lines.append("Resume brief:")
-        for line in report["resume_brief"]:
-            if line.strip():
-                lines.append(f"  {line.strip()}")
+        lines.extend(_brief_lines(report["resume_brief"]))
     lines.append("")
     phase = report["current_phase"]
     if phase is None:
@@ -1571,17 +1575,11 @@ def render_status_text(status: dict[str, Any]) -> str:
     lines = [
         f"{status['title']} — master v{status['master_version']} ({status['master_status']})"
     ]
-    for row in status["phases"]:
-        lines.append(
-            f"  {row['id']:<3} {row['status']:<12} {row['name']} "
-            f"(depends: {row['depends']})"
-        )
+    lines.extend(_phase_map_lines(status["phases"]))
     if status["resume_brief"]:
         lines.append("")
         lines.append("Resume brief")
-        for line in status["resume_brief"]:
-            if line.strip():
-                lines.append("  " + line.strip())
+        lines.extend(_brief_lines(status["resume_brief"]))
     lines.append("")
     lines.append(f"Plan check: {'ok' if not status['errors'] else 'FAILED'}")
     for error in status["errors"]:

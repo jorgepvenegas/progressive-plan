@@ -551,6 +551,28 @@ class CommitAndCloseTests(PlanTestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("does not look like the P1 commit", result.stdout + result.stderr)
 
+    def test_record_commit_rejects_non_ancestor_commit(self) -> None:
+        init_git(self.tmp)
+        subprocess.run(["git", "checkout", "-b", "side"], cwd=self.tmp, check=True)
+        (self.tmp / "side.txt").write_text("side", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=self.tmp, check=True)
+        subprocess.run(["git", "commit", "-qm", "side"], cwd=self.tmp, check=True)
+        side_hash = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=self.tmp,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).stdout.strip()
+        subprocess.run(["git", "checkout", "-"], cwd=self.tmp, check=True)
+        plan_dir = make_valid_plan(self.tmp, "in_progress")
+        result = run_cli(
+            self.tmp, "record-commit", str(plan_dir), "P1", "--hash", side_hash
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("is not an ancestor of HEAD", result.stdout + result.stderr)
+
     def test_record_commit_accepts_phase_commit(self) -> None:
         init_git(self.tmp)
         plan_dir = make_valid_plan(self.tmp, "in_progress")
