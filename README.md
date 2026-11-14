@@ -23,32 +23,36 @@ flowchart TD
     classDef artifact fill:#f5f5f5,stroke:#999
 
     Request([Issue, request, or interrupted session]) --> Existing{Existing plan?}
-    Existing -->|No| Intake["progressive-plan<br/>intake and size the work"]
+    Existing -->|No| Intake["progressive-plan<br/>intake, size, write master"]
     Existing -->|Yes| Resume["plan-resume<br/>reconstruct state from plans and git"]
 
     Intake --> Master[("master.md<br/>objective, goal flow, definition of done, phase map")]
-    Master --> Phase[("phase plan<br/>steps, acceptance, verification")]
-    Resume --> Phase
+    Master -->|add-phase / write-plan| Phase[("phase plan<br/>steps, acceptance, verification")]
+    Resume -->|current phase| Phase
 
-    Phase --> Approve{User explicitly<br/>approves the phase?}
-    Approve -->|No| Refine["refine-phase<br/>revise and re-present the plan"]
-    Refine --> Approve
+    Phase --> Check{"check<br/>content and coverage?"}
+    Check -->|No: fix plan| Phase
+    Check -->|Yes| Approve{User explicitly<br/>approves the phase?}
+    Approve -->|No| Refine["refine-phase<br/>revise and re-present"]
+    Refine --> Check
     Approve -->|Yes| Implement["Delegate the phase to a subagent<br/>implement, verify, write closeout"]
 
-    Implement --> Review["Coordinator reviews evidence<br/>updates master and discoveries"]
-    Review --> Commit[Commit the phase]
-    Commit --> More{Master definition<br/>of done met?}
-    More -->|No: write the next phase plan| Phase
-    More -->|Yes| Finish([Offer draft PR and close the plan])
+    Implement --> Review["Coordinator reviews evidence<br/>scope and standards checks"]
+    Review --> Record["record-commit --by worker"]
+    Record --> Close{"close<br/>coverage, standards, commit?"}
+    Close -->|No: return to review| Review
+    Close -->|Yes| More{Master definition<br/>of done met?}
+    More -->|No: next phase plan| Phase
+    More -->|Yes| Finish(["report; offer draft PR; master complete"])
 
     class Intake,Resume,Refine,Implement skill
-    class Approve,More gate
+    class Check,Approve,Close,More gate
     class Master,Phase artifact
 ```
 
 `progressive-plan` owns the loop: intake, sizing, the master plan, just-in-time phase plans, the approval gate, delegation, closeout, and the commit gate. `refine-phase` handles a rejected phase plan and returns it to the approval gate. `plan-resume` re-enters the loop for an existing plan by reconstructing state from `master.md`, the phase plan, and git history. Implementation does not start until the user explicitly approves the current phase. Each generated `master.md` also carries a `Goal flow` section: a small Mermaid diagram of the user-visible outcome for the person approving phases. Existing masters are upgraded by `plan-resume` before it continues. Each master records the project's real format, lint, type-check, and test commands, and a phase cannot be `done` while its code standards check is open.
 
-`approve` validates the plan content before recording approval. It refuses a plan that still contains template placeholders, has no steps or acceptance criteria, or omits an affecting discovery. `close` is the only transition that marks a phase done; it requires an `addressed` closeout, a `met` row for every criterion and claimed definition-of-done item, a checked code-standards list, an implementer, and a real commit. `check --strict` turns warnings into errors for CI.
+`add-phase --outline` adds a `planned` row without a plan; `write-plan` creates the plan just in time. `approve` validates the plan content before recording approval. It refuses a plan that still contains template placeholders, has no steps or acceptance criteria, or omits an affecting discovery. After review, `record-commit` records the phase commit and implementer, and `close` is the only transition that marks a phase done. `close` requires an `addressed` closeout, a `met` row for every criterion and claimed definition-of-done item, a checked code-standards list, an implementer, and a real commit. `check --strict` turns warnings into errors for CI.
 
 `new --size small` uses compact master and phase templates. All sizes keep the same required sections and gates.
 
