@@ -518,26 +518,14 @@ def working_tree(plan_dir: Path) -> list[str]:
     return [line for line in output.splitlines() if line.strip()]
 
 
-def validate_plan(
-    plan_dir: Path,
-    *,
-    strict: bool = False,
-    only_phase: str | None = None,
-    for_approval: bool = False,
-) -> dict[str, Any]:
-    """Validate a master plan and its phase plans.
+def _validate_master_header(
+    master: str, errors: list[str]
+) -> tuple[int | None, str | None, str]:
+    """Validate version, headings, status, size, and Goal flow.
 
-    only_phase limits per-phase checks to one phase. for_approval applies the
-    ready-phase content checks to that phase before its status is changed.
+    Returns (version, master_status, goal_flow). Appends errors in the current
+    order.
     """
-    plan_dir = Path(plan_dir)
-    errors: list[str] = []
-    warnings: list[str] = []
-    master_file = plan_dir / "master.md"
-    if not master_file.exists():
-        return {"errors": [f"{master_file} does not exist"], "warnings": []}
-
-    master = read_text(master_file)
     version = master_version(master)
     if version is None:
         errors.append("master: missing '- Master version: N'")
@@ -562,6 +550,12 @@ def validate_plan(
     if goal_flow and "```mermaid" not in goal_flow:
         errors.append("master: Goal flow has no Mermaid diagram")
 
+    return version, master_status, goal_flow
+
+
+def _validate_definition_items(
+    master: str, errors: list[str]
+) -> list[dict[str, Any]]:
     dod = definition_items(master)
     if not dod:
         errors.append("master: Definition of done has no D items")
@@ -573,7 +567,12 @@ def validate_plan(
             errors.append(f"master: {item['id']} has no description")
         if not item["verify"]:
             errors.append(f"master: {item['id']} has no verify clause")
+    return dod
 
+
+def _validate_phase_map(
+    master: str, errors: list[str], warnings: list[str]
+) -> tuple[list[dict[str, Any]], set[str]]:
     rows = phase_rows(master)
     if not rows:
         warnings.append("master: phase map is empty")
@@ -595,12 +594,15 @@ def validate_plan(
         if row["status"] not in VALID_STATUSES:
             errors.append(f"master: {phase_id} has invalid status '{row['status']}'")
 
-    active = any(
-        row["status"] in {"ready", "in_progress", "done"} for row in rows
-    ) or master_status in {"active", "complete"} or (
-        for_approval and only_phase is not None
-    )
+    return rows, phase_ids
 
+
+def _validate_ledger_rows(
+    master: str,
+    errors: list[str],
+    phase_ids: set[str],
+    active: bool,
+) -> list[dict[str, Any]]:
     entries = ledger_rows(master)
     for entry in entries:
         if entry["malformed"]:
@@ -648,7 +650,15 @@ def validate_plan(
             errors.append(
                 f"master: ledger {entry['id']} names unknown phase '{entry['phase']}'"
             )
+    return entries
 
+
+def _validate_decision_rows(
+    master: str,
+    errors: list[str],
+    phase_ids: set[str],
+    active: bool,
+) -> None:
     for decision in decision_rows(master):
         if decision["malformed"]:
             errors.append(
@@ -678,6 +688,13 @@ def validate_plan(
                     f"master: decision {decision['id']} affects unknown phase {ref}"
                 )
 
+
+def _validate_dependency_graph(
+    rows: list[dict[str, Any]],
+    phase_ids: set[str],
+    active: bool,
+    errors: list[str],
+) -> None:
     graph: dict[str, set[str]] = {}
     for row in rows:
         if row["malformed"]:
@@ -700,6 +717,14 @@ def validate_plan(
     for cycle in _cycle_nodes(graph):
         errors.append(f"master: dependency cycle: {cycle}")
 
+
+def _validate_active_master_content(
+    master: str,
+    goal_flow: str,
+    dod: list[dict[str, Any]],
+    active: bool,
+    errors: list[str],
+) -> None:
     if active:
         for name, text in [
             ("Objective", section(master, "Objective")),
@@ -734,12 +759,32 @@ def validate_plan(
         if all(marker in goal_flow for marker in template_markers):
             errors.append("master: Goal flow still contains the template diagram")
 
+
+def _validate_master_status_rules(
+    master_status: str | None,
+    rows: list[dict[str, Any]],
+    active: bool,
+    errors: list[str],
+    warnings: list[str],
+) -> None:
     if active and master_status == "draft":
         warnings.append("master: status is draft but work has started; set Status: active")
     if master_status == "complete":
         if not rows or not all(row["status"] == "done" for row in rows):
             errors.append("master: status is complete but not every phase is done")
 
+
+def _validate_phase_plans(
+    plan_dir: Path,
+    master: str,
+    rows: list[dict[str, Any]],
+    version: int | None,
+    dod: list[dict[str, Any]],
+    entries: list[dict[str, Any]],
+    only_phase: str | None,
+    for_approval: bool,
+    errors: list[str],
+) -> dict[str, Path]:
     phase_plan_files: dict[str, Path] = {}
     for row in rows:
         if row["malformed"]:
@@ -1082,6 +1127,15 @@ def validate_plan(
                         f"master: Closeout history for {phase_id} has no criteria met"
                     )
 
+    return phase_plan_files
+
+
+def _validate_master_completion(
+    master_status: str | None,
+    rows: list[dict[str, Any]],
+    dod: list[dict[str, Any]],
+    errors: list[str],
+) -> None:
     if master_status == "complete":
         unchecked = [item["id"] for item in dod if not item["checked"]]
         if unchecked:
@@ -1090,6 +1144,13 @@ def validate_plan(
                 + ", ".join(unchecked)
             )
 
+
+def _validate_final_closeout(
+    rows: list[dict[str, Any]],
+    dod: list[dict[str, Any]],
+    phase_plan_files: dict[str, Path],
+    errors: list[str],
+) -> None:
     if rows and all(row["status"] == "done" for row in rows):
         unchecked = [item["id"] for item in dod if not item["checked"]]
         if unchecked:
@@ -1118,6 +1179,54 @@ def validate_plan(
                     errors.append(
                         f"{final_file}: final closeout has no evidence for {item['id']}"
                     )
+
+
+def validate_plan(
+    plan_dir: Path,
+    *,
+    strict: bool = False,
+    only_phase: str | None = None,
+    for_approval: bool = False,
+) -> dict[str, Any]:
+    """Validate a master plan and its phase plans.
+
+    only_phase limits per-phase checks to one phase. for_approval applies the
+    ready-phase content checks to that phase before its status is changed.
+    """
+    plan_dir = Path(plan_dir)
+    errors: list[str] = []
+    warnings: list[str] = []
+    master_file = plan_dir / "master.md"
+    if not master_file.exists():
+        return {"errors": [f"{master_file} does not exist"], "warnings": []}
+
+    master = read_text(master_file)
+    version, master_status, goal_flow = _validate_master_header(master, errors)
+    dod = _validate_definition_items(master, errors)
+    rows, phase_ids = _validate_phase_map(master, errors, warnings)
+    active = any(
+        row["status"] in {"ready", "in_progress", "done"} for row in rows
+    ) or master_status in {"active", "complete"} or (
+        for_approval and only_phase is not None
+    )
+    entries = _validate_ledger_rows(master, errors, phase_ids, active)
+    _validate_decision_rows(master, errors, phase_ids, active)
+    _validate_dependency_graph(rows, phase_ids, active, errors)
+    _validate_active_master_content(master, goal_flow, dod, active, errors)
+    _validate_master_status_rules(master_status, rows, active, errors, warnings)
+    phase_plan_files = _validate_phase_plans(
+        plan_dir,
+        master,
+        rows,
+        version,
+        dod,
+        entries,
+        only_phase,
+        for_approval,
+        errors,
+    )
+    _validate_master_completion(master_status, rows, dod, errors)
+    _validate_final_closeout(rows, dod, phase_plan_files, errors)
 
     if strict and warnings:
         errors.extend(f"warning treated as error: {warning}" for warning in warnings)

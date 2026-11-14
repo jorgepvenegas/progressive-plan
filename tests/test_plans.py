@@ -681,5 +681,79 @@ class ResumeAndReportTests(PlanTestCase):
         self.assertIn("Risks and unknowns", planlib.PHASE_HEADINGS)
 
 
+class ValidationCharacterizationTests(PlanTestCase):
+    def test_new_plan_draft_empty_phase_map(self) -> None:
+        plan_dir = self.new_plan()
+        self.assertEqual(
+            planlib.validate_plan(plan_dir),
+            {"errors": [], "warnings": ["master: phase map is empty"]},
+        )
+
+    def test_valid_plan_ready(self) -> None:
+        plan_dir = make_valid_plan(self.tmp, "ready")
+        self.assertEqual(
+            planlib.validate_plan(plan_dir),
+            {"errors": [], "warnings": []},
+        )
+
+    def test_valid_plan_in_progress(self) -> None:
+        plan_dir = make_valid_plan(self.tmp, "in_progress")
+        self.assertEqual(
+            planlib.validate_plan(plan_dir),
+            {"errors": [], "warnings": []},
+        )
+
+    def test_malformed_phase_row(self) -> None:
+        plan_dir = self.new_plan()
+        master = self.master(plan_dir)
+        lines = master.splitlines()
+        index = next(
+            i for i, line in enumerate(lines) if line.startswith("| ID | Phase |")
+        )
+        lines.insert(index + 2, "| P1 | Broken | no plan |")
+        (plan_dir / "master.md").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8"
+        )
+        self.assertEqual(
+            planlib.validate_plan(plan_dir),
+            {
+                "errors": [
+                    "master: malformed phase row for P1; expected 6 columns (ID, Phase, Outcome, Depends on, Status, Plan)",
+                    "master: P1 has invalid status ''",
+                ],
+                "warnings": [],
+            },
+        )
+
+    def test_malformed_ledger_row(self) -> None:
+        plan_dir = self.new_plan()
+        master = self.master(plan_dir)
+        lines = master.splitlines()
+        index = next(
+            i
+            for i, line in enumerate(lines)
+            if line.startswith("| ID | Date | Phase | Affects |")
+        )
+        lines.insert(
+            index + 2,
+            "| L1 | 2026-11-14 | P1 | P99 | Found | bogus |  | open |",
+        )
+        (plan_dir / "master.md").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8"
+        )
+        self.assertEqual(
+            planlib.validate_plan(plan_dir),
+            {
+                "errors": [
+                    "master: ledger L1 affects unknown phase P99",
+                    "master: ledger L1 has invalid type 'bogus'",
+                    "master: ledger L1 has no action taken",
+                    "master: ledger L1 names unknown phase 'P1'",
+                ],
+                "warnings": ["master: phase map is empty"],
+            },
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
