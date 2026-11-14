@@ -339,6 +339,8 @@ def cmd_write_plan(args: argparse.Namespace) -> None:
 
 def cmd_approve(args: argparse.Namespace) -> None:
     plan_dir = Path(args.plan_dir)
+    if is_pending(args.by):
+        fail("--by must name the approving user")
     master, row = _find_phase_row(plan_dir, args.phase)
     if row["status"] in {"done", "superseded"}:
         fail(f"phase {args.phase} is already {row['status']}")
@@ -847,7 +849,9 @@ def cmd_scope(args: argparse.Namespace) -> None:
     if repo is None:
         fail(f"{plan_dir} is not inside a git repository")
     base = _resolve_base(plan_dir, row, args.base)
-    changed = git(repo, "diff", "--name-only", f"{base}..HEAD") or ""
+    changed = git(repo, "diff", "--name-only", f"{base}..HEAD")
+    if changed is None:
+        fail(f"could not diff {base}..HEAD in {repo}")
     changed_files = [line for line in changed.splitlines() if line.strip()]
     try:
         plan_relative = plan_dir.resolve().relative_to(repo.resolve()).as_posix()

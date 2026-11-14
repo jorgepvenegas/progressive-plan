@@ -598,6 +598,9 @@ def validate_plan(
     dod = definition_items(master)
     if not dod:
         errors.append("master: Definition of done has no D items")
+    dod_id_list = [item["id"] for item in dod]
+    if len(dod_id_list) != len(set(dod_id_list)):
+        errors.append("master: Definition of done has duplicate D ids")
     for item in dod:
         if not item["text"]:
             errors.append(f"master: {item['id']} has no description")
@@ -955,6 +958,11 @@ def validate_plan(
             if not acceptance:
                 errors.append(
                     f"{plan_file}: Phase acceptance criteria has no A items"
+                )
+            acceptance_ids = [item["id"] for item in acceptance]
+            if len(acceptance_ids) != len(set(acceptance_ids)):
+                errors.append(
+                    f"{plan_file}: Phase acceptance criteria has duplicate A ids"
                 )
             for criterion in acceptance:
                 if not criterion["verify"]:
