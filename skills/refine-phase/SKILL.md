@@ -1,6 +1,6 @@
 ---
 name: refine-phase
-description: Refine an unapproved progressive-plan phase plan after the user rejects it or requests changes, then re-present it for approval and continue into delegated implementation once approved. Use when the user says no to a phase plan, asks for plan changes before approving, or wants scope, steps, acceptance criteria, files, or risks revised after plan review.
+description: Refine an unapproved progressive-plan phase plan after rejection or requested changes, then re-present it for approval. Use when the user says no to a plan or wants its scope, steps, acceptance, files, or risks revised.
 ---
 
 # Refine Phase
@@ -27,15 +27,15 @@ Then read the current phase plan and `master.md` fresh. `<progressive-plan-dir>`
 - Do not set `in_progress`.
 - Do not spawn a worker.
 
-If the phase was already marked `ready` or has approval fields, reset it before refining:
+If the phase was already marked `ready` or has approval fields, reset it with:
 
-- `Status: draft`
-- `Approved by: pending`
-- `Approved at: pending`
-- `Commit: pending`
-- master phase row: `planned`
+```bash
+python3 <progressive-plan-dir>/scripts/progressive_plan.py reopen docs/plans/<slug> P<n>
+```
 
-If the phase is already `in_progress` or `done`, this is no longer a plan refinement. Stop and handle it as a scope change: use the master amendment and discovery rules in `references/master-change-propagation.md`.
+`reopen` sets the phase `draft`, the master row `planned`, clears approval and implementation fields, and bumps `Plan version`.
+
+If the phase is already `in_progress` or `done`, this is no longer a plan refinement. Stop and handle it as a scope change: use the master amendment and discovery rules in `references/master-change-propagation.md`. If the plan itself is wrong, `reopen` is still the first step; then treat the change as a new plan revision, not a rewrite of completed evidence.
 
 ## 2. Understand the requested change
 
@@ -66,7 +66,7 @@ If `check` fails because the master predates a required section such as `Goal fl
 - Bump `Plan version` by 1 for a material change. Leave it unchanged for a typo or formatting-only edit.
 - Set `Validated against master version` to the current master version.
 - Keep `Status: draft`, `Approved by: pending`, and `Approved at: pending`.
-- If the feedback reveals a new discovery, add a master ledger row first, then list it in `Prior discoveries applied`.
+- If the feedback reveals a new discovery, append it with `add-discovery` first, then list it in `Prior discoveries applied`.
 
 ### Master-level changes
 
@@ -106,6 +106,8 @@ python3 <progressive-plan-dir>/scripts/progressive_plan.py check docs/plans/<slu
 python3 <progressive-plan-dir>/scripts/progressive_plan.py status docs/plans/<slug>
 ```
 
+`check` now validates content, not just headings: no template placeholders, at least one step and acceptance criterion, traceability for every criterion, and every affecting discovery. Fix every error before re-presenting.
+
 Present a delta, not the whole plan again:
 
 ```text
@@ -139,7 +141,7 @@ Only after the user explicitly approves:
    - the approval record (`Approved by`, `Approved at`),
    - the instruction to implement, verify, write the phase closeout, commit on the plan branch, and report the hash.
 6. Keep the handle. Do not implement the phase in the coordinator.
-7. Report the handoff, then follow the normal `progressive-plan` closeout loop: review the worker's files, tests, closeout, and commit; update the master; record the commit. When the final phase is done and all D items are met, follow the progressive-plan End of plan gate and offer a draft PR.
+7. Report the handoff, then follow the normal `progressive-plan` closeout loop: review the worker's files, tests, closeout, and commit; run `scope`; record the commit with `record-commit --by`; close the phase with `close`. When the final phase is done and all D items are met, run `report` and offer a draft PR.
 
 If the user pauses or rejects without actionable feedback, keep the phase `draft`, record the round, and ask one focused question. If the user abandons the phase, set it `blocked` and name the reason.
 
@@ -152,14 +154,14 @@ If the user pauses or rejects without actionable feedback, keep the phase `draft
 - **No dropped discoveries.** Run `discoveries` for the current phase after ledger changes.
 - **No full rewrite for a small change.** Keep the diff reviewable.
 - **No version inflation.** Bump versions for semantic changes, not typos.
-- **No default-branch implementation.** Work on `plan/<slug>`; do not switch branches silently.
-- **No scope absorption.** New outcomes become new phases, not extra steps in the phase under review.
 - **No weakened quality gates.** Do not drop standards checks, tests, or acceptance criteria to make a plan approvable.
-- **No PR without consent.** At plan completion, offer the draft PR; do not push or open it without explicit approval.
+
+The shared approval, delegation, closeout, commit, and PR gates are in `../progressive-plan/references/gates.md`.
 
 ## Files
 
 - `references/master-change-propagation.md` — how to change the master and propagate to affected phases.
-- `../progressive-plan/SKILL.md` — approval gate, phase loop, and closeout.
-- `../progressive-plan/scripts/progressive_plan.py` — `check`, `status`, `approve`, `discoveries`.
+- `../progressive-plan/SKILL.md` — the full loop.
+- `../progressive-plan/references/gates.md` — shared approval, delegation, closeout, commit, and PR gates.
+- `../progressive-plan/scripts/progressive_plan.py` — `check`, `status`, `approve`, `reopen`, `record-commit`, `close`, `add-discovery`, `scope`, `report`.
 - `../progressive-plan/references/worker-prompt-template.md` — required subagent prompt.
