@@ -124,22 +124,7 @@ For a small task, keep the intake to a few lines. Link to the issue instead of c
 
 ## Code standards
 
-The repository owns its standards. Read `AGENTS.md`/`CLAUDE.md`, contributor docs, tooling config, and nearby code; record the exact checks in the master. Do not restate a style guide in the plan.
-
-Every phase and every step follows these rules:
-
-- **Smallest change.** Add only what the acceptance criteria require. No speculative abstraction, extension point, configuration, or dependency (YAGNI).
-- **Reuse before writing.** Use an existing helper or pattern when it fits. Remove duplication the change creates, but do not build a framework for two similar lines (DRY).
-- **Expressive code.** Names state intent and units; a function or module does one job. No dead code, commented-out code, or unused exports.
-- **Comments explain why.** Write a comment only for a non-obvious constraint, workaround, or trade-off that the code cannot show. Do not narrate what the code does, restate a name, or keep a changelog in comments.
-- **Tests are evidence.** A test asserts observable behavior or a failure the requirements name. Do not add a test that restates the implementation, repeats another test's assertion, or would still pass if the behavior broke. Test behavior, not internal calls.
-- **No drive-by cleanup.** Leave unrelated code, formatting, names, and dependencies alone. Report the problem instead.
-
-Enforcement:
-
-- The master records the project's standards commands (format, lint, type check, tests). Each phase verification includes the commands that cover the changed code.
-- The worker runs those commands, records the result in the phase plan's `Code standards check`, and reports any rule it cannot meet. It does not weaken the rule.
-- The coordinator reviews the diff for duplicated logic, speculative abstraction, dead code, comment noise, and tautological tests. A green test suite does not excuse a violation.
+The repository owns its standards. Read `AGENTS.md`/`CLAUDE.md`, contributor docs, tooling config, and nearby code; record the exact checks in the master. Every phase follows the smallest-change, reuse, expressive-code, comments-explain-why, tests-are-evidence, and no-drive-by-cleanup rules. `approve` requires the checklist; `close` requires every item checked. The full rules and enforcement are in `references/code-standards.md`.
 
 ## Branch and PR gates
 
@@ -382,35 +367,11 @@ Run `progressive_plan.py status <plan-dir>` to confirm the next legal action. Wh
 
 ## User-facing closeout report
 
-End every closeout with a short report in this shape:
-
-```text
-Phase P2 closeout — <phase name>
-Verdict: addressed | partial | blocked
-Master coverage: D1 met (<evidence>), D2 partial (<gap>), D3 not started
-Discoveries no earlier plan predicted: <one line each, or "none">
-Plan updates: master v3 (<rows/sections changed>); P3 plan v2 (<sections changed>)
-Standards: passed | <unmet rule and reason>
-Commit: <short hash>
-Branch: plan/<slug>
-Next action: <one concrete action>
-```
-
-Lead with the verdict and the coverage result. Do not bury a partial verdict under a list of completed steps.
+End every closeout with the verdict, master coverage, discoveries, plan updates, standards result, commit, branch, and next action. The exact shape is in `references/closeout-report.md`. Lead with the verdict and coverage result; do not bury a partial verdict under completed steps.
 
 ## Orchestrating subagents
 
-Subagent implementation is mandatory for every approved phase. The coordinator handles planning, approval, review, and master updates.
-
-- The coordinator owns `master.md`. A worker owns one phase plan at a time and the implementation files listed in that plan.
-- Never let two agents write `master.md`, claim the same phase, or edit the same shared files.
-- Spawn the worker only after approval. The prompt must include absolute paths to `master.md` and the phase plan, the phase ID, the scope fence, the approval record (`Approved by`, `Approved at`), and the instruction to implement, verify, write the phase-plan closeout, commit, and report verdict plus discoveries.
-- Use the `references/worker-prompt-template.md` file. Do not improvise a shorter prompt that omits the approval or the scope fence.
-- Use the harness's own delegation API: in prime-agent, `rlm.spawn(prompt, name=...)` returns a handle and the worker replies through `agent_message`; in Claude Code, spawn a Task; in Pi, use `pi-subagents`. Keep whatever handle, task ID, or result channel the harness returns, and recover it after a restart or compaction.
-- The worker may update its phase plan but not `master.md`. It reports master-level changes to the coordinator; the coordinator applies them and marks the phase done.
-- The worker commits the phase after closeout and reports the short hash. The coordinator verifies the hash, runs `record-commit`, and then runs `close`.
-- Run phases in parallel only when the master says they are independent and their file sets do not collide.
-- Verify a silent worker's output before assuming failure: read the phase plan, changed files, commit, and test output, then decide.
+Subagent implementation is mandatory for every approved phase. The coordinator owns `master.md`; one worker owns one phase plan and the files listed in it. Spawn only after approval, with the full worker prompt and the scope fence. Run phases in parallel only when the master marks them independent and their file sets do not collide. Verify a silent worker's files, commit, and tests before assuming failure. The full rules are in `references/orchestration.md`.
 
 ## Failure modes to avoid
 
@@ -432,6 +393,9 @@ The full list is in `references/failure-modes.md`. The most damaging are:
 - `references/issue-intake.md` — reading GitHub/Linear/tracker issues, extraction checklist, gap questions, and sizing examples.
 - `references/example-plan.md` — a filled small one-phase plan.
 - `references/gates.md` — the shared approval, delegation, closeout, commit, and PR gates.
+- `references/code-standards.md` — code-quality rules and enforcement.
+- `references/closeout-report.md` — the user-facing closeout report shape.
+- `references/orchestration.md` — subagent delegation rules.
 - `references/failure-modes.md` — the full failure-mode checklist.
 - `scripts/progressive_plan.py` — `new`, `add-phase`, `write-plan`, `approve`, `reopen`, `record-commit`, `close`, `add-discovery`, `add-decision`, `discoveries`, `scope`, `report`, `check`, `status`.
 - `scripts/planlib.py` — shared parser, validation, status, and report helpers.

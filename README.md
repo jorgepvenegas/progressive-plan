@@ -84,7 +84,7 @@ python3 skills/progressive-plan/scripts/progressive_plan.py status docs/plans/<s
 skills/
 ├── progressive-plan/
 │   ├── SKILL.md
-│   ├── references/        # templates, gates, failure modes, issue intake
+│   ├── references/        # templates, gates, standards, closeout, examples
 │   └── scripts/
 │       ├── progressive_plan.py
 │       └── planlib.py     # shared parser, validation, status, report
