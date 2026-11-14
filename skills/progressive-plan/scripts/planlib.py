@@ -1072,11 +1072,35 @@ def validate_plan(
                         f"{plan_file}: code standards check item {index} is not checked"
                     )
 
-            history = closeout_history_rows(master)
-            if not any(row["phase"] == phase_id for row in history):
+            history_row = next(
+                (
+                    row
+                    for row in closeout_history_rows(master)
+                    if row["phase"] == phase_id
+                ),
+                None,
+            )
+            if history_row is None:
                 errors.append(
                     f"master: done phase {phase_id} is missing from Closeout history"
                 )
+            else:
+                if history_row["malformed"]:
+                    errors.append(
+                        f"master: Closeout history row for {phase_id} is malformed"
+                    )
+                if history_row["verdict"] != "addressed":
+                    errors.append(
+                        f"master: Closeout history for {phase_id} is not addressed"
+                    )
+                if is_pending(history_row["commit"]):
+                    errors.append(
+                        f"master: Closeout history for {phase_id} has no commit"
+                    )
+                if not history_row["criteria"]:
+                    errors.append(
+                        f"master: Closeout history for {phase_id} has no criteria met"
+                    )
 
     if master_status == "complete":
         unchecked = [item["id"] for item in dod if not item["checked"]]
