@@ -1514,11 +1514,36 @@ def render_report(plan_dir: Path) -> str:
     lines.append("")
     lines.append("## Objective")
     lines.append(section(master, "Objective").strip() or "_missing_")
+    dod_items = definition_items(master)
     lines.append("")
     lines.append("## Definition of done")
-    for item in definition_items(master):
+    for item in dod_items:
         mark = "x" if item["checked"] else " "
         lines.append(f"- [{mark}] {item['id']} — {item['text']}")
+    done_rows = [row for row in rows if row["status"] == "done"]
+    if done_rows:
+        final_row = max(
+            done_rows, key=lambda row: int(re.sub(r"\D", "", row["id"]) or 0)
+        )
+        final_file = phase_plan_path(plan_dir, final_row)
+        if final_file.exists():
+            final_coverage = {
+                row["criterion"]: row
+                for row in closeout_rows(read_text(final_file))
+            }
+            lines.append("")
+            lines.append("### Definition of done verdicts")
+            lines.append("| Item | Verdict | Evidence |")
+            lines.append("|---|---|---|")
+            for item in dod_items:
+                row = final_coverage.get(item["id"])
+                if row is None:
+                    lines.append(f"| {item['id']} | not covered | - |")
+                else:
+                    lines.append(
+                        f"| {item['id']} | {row['verdict'] or 'missing'} | "
+                        f"{row['evidence'] or '-'} |"
+                    )
     lines.append("")
     lines.append("## Phase map")
     lines.append("| ID | Phase | Outcome | Depends on | Status | Plan |")
