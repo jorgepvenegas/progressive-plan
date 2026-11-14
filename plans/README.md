@@ -16,7 +16,7 @@ characterization tests are the gate.
 | 001 | Consolidate plan parsing and identifier helpers | P1 | S/M | — | DONE |
 | 002 | Split `validate_plan` into focused validation passes | P1 | M | 001 | DONE |
 | 003 | Consolidate markdown table location and rewrite helpers | P2 | M | 001 | DONE |
-| 004 | Extract master version and stale-phase maintenance helpers | P2 | S | 001, 003 | TODO |
+| 004 | Extract master version and stale-phase maintenance helpers | P2 | S | 001, 003 | DONE |
 | 005 | Share repository, commit, and renderer helpers | P3 | S | 001, 004 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)

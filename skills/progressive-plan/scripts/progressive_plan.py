@@ -35,6 +35,7 @@ from planlib import (
     affecting_ledger,
     build_status,
     bump_int_field,
+    bump_master_version,
     closeout_rows,
     closeout_verdict,
     commit_date,
@@ -56,12 +57,14 @@ from planlib import (
     phase_plan_path,
     phase_rows,
     read_text,
+    require_master_version,
     render_report,
     render_status_text,
     section,
     set_field,
     set_field_all,
     slugify,
+    stale_phase_ids,
     validate_plan,
     working_tree,
     write_text,
@@ -85,6 +88,15 @@ def _cell(value: str, label: str) -> str:
     if "|" in value or "\n" in value or "\r" in value:
         fail(f"{label} must not contain '|' or a newline")
     return value
+
+
+def _warn_stale_phases(master: str) -> None:
+    stale = stale_phase_ids(master)
+    if stale:
+        print(
+            "warning: master version bumped; revalidate these phases: "
+            + ", ".join(stale)
+        )
 
 
 def _section_bounds(
@@ -286,9 +298,7 @@ def cmd_add_phase(args: argparse.Namespace) -> None:
     rows = phase_rows(master)
     number = max((int(row["id"][1:]) for row in rows), default=0) + 1
     phase_id = f"P{number}"
-    version = master_version(master)
-    if version is None:
-        fail("master plan has no '- Master version: N' line")
+    version = require_master_version(master)
     new_version = version + 1
     master = set_field(master, "Master version", str(new_version))
 
@@ -327,16 +337,7 @@ def cmd_add_phase(args: argparse.Namespace) -> None:
     else:
         print(f"created {plan_dir / 'phases' / f'{number:02d}-{slugify(name)}'}/plan.md")
         print(f"added {phase_id} to {master_file}")
-    stale = [
-        item["id"]
-        for item in rows
-        if item["status"] in {"ready", "in_progress"}
-    ]
-    if stale:
-        print(
-            "warning: master version bumped; revalidate these phases: "
-            + ", ".join(stale)
-        )
+    _warn_stale_phases(master)
 
 
 def cmd_write_plan(args: argparse.Namespace) -> None:
@@ -346,9 +347,7 @@ def cmd_write_plan(args: argparse.Namespace) -> None:
         fail(f"phase {args.phase} is {row['status']}; only planned phases get a new plan")
     if str(row["plan"]).strip().lower() not in {"", "pending", "not written", "—", "-"}:
         fail(f"phase {args.phase} already has a plan: {row['plan']}")
-    version = master_version(master)
-    if version is None:
-        fail("master plan has no '- Master version: N' line")
+    version = require_master_version(master)
     number = int(row["id"][1:])
     name = row["name"]
     phase_dir = plan_dir / "phases" / f"{number:02d}-{slugify(name)}"
@@ -750,23 +749,11 @@ def cmd_add_discovery(args: argparse.Namespace) -> None:
     )
     master = _insert_table_row(master, "Discovery ledger", row, r"[A-Z]\d+")
     if not args.no_bump:
-        version = master_version(master)
-        if version is None:
-            fail("master plan has no '- Master version: N' line")
-        master = set_field(master, "Master version", str(version + 1))
+        master, _ = bump_master_version(master)
     write_text(master_file, master)
     print(f"added {entry_id} to {master_file}")
     if not args.no_bump:
-        stale = [
-            item["id"]
-            for item in phase_rows(master)
-            if item["status"] in {"ready", "in_progress"}
-        ]
-        if stale:
-            print(
-                "warning: master version bumped; revalidate these phases: "
-                + ", ".join(stale)
-            )
+        _warn_stale_phases(master)
 
 
 def cmd_add_decision(args: argparse.Namespace) -> None:
@@ -791,22 +778,10 @@ def cmd_add_decision(args: argparse.Namespace) -> None:
         f"{reason} | {args.affects} |"
     )
     master = _insert_table_row(master, "Cross-phase decisions", row, r"C\d+")
-    version = master_version(master)
-    if version is None:
-        fail("master plan has no '- Master version: N' line")
-    master = set_field(master, "Master version", str(version + 1))
+    master, _ = bump_master_version(master)
     write_text(master_file, master)
     print(f"added {decision_id} to {master_file}")
-    stale = [
-        row["id"]
-        for row in phase_rows(master)
-        if row["status"] in {"ready", "in_progress"}
-    ]
-    if stale:
-        print(
-            "warning: master version bumped; revalidate these phases: "
-            + ", ".join(stale)
-        )
+    _warn_stale_phases(master)
 
 
 def cmd_status(args: argparse.Namespace) -> None:

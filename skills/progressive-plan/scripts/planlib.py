@@ -153,6 +153,27 @@ def master_version(text: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def require_master_version(master: str) -> int:
+    version = master_version(master)
+    if version is None:
+        fail("master plan has no '- Master version: N' line")
+    return version
+
+
+def bump_master_version(master: str) -> tuple[str, int]:
+    version = require_master_version(master)
+    new_version = version + 1
+    return set_field(master, "Master version", str(new_version)), new_version
+
+
+def stale_phase_ids(master: str) -> list[str]:
+    return [
+        item["id"]
+        for item in phase_rows(master)
+        if item["status"] in {"ready", "in_progress"}
+    ]
+
+
 def closeout_verdict(plan_text: str) -> str | None:
     match = re.search(
         r"^-\s*Verdict:\s*(\S+)", section(plan_text, "Closeout"), re.MULTILINE

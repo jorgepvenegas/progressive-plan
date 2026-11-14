@@ -365,6 +365,19 @@ class ApprovalTests(PlanTestCase):
         )
         self.assertIn("Master version: 2", self.master(plan_dir))
 
+    def test_missing_master_version_fails(self) -> None:
+        plan_dir = self.new_plan()
+        master = self.master(plan_dir).replace("- Master version: 1\n", "", 1)
+        (plan_dir / "master.md").write_text(master, encoding="utf-8")
+        result = run_cli(
+            self.tmp, "add-phase", str(plan_dir), "First phase", "--outline"
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "master plan has no '- Master version: N' line",
+            result.stdout + result.stderr,
+        )
+
     def test_add_phase_rejects_unknown_dependency(self) -> None:
         plan_dir = self.new_plan()
         result = run_cli(
@@ -504,6 +517,28 @@ class DiscoveryTests(PlanTestCase):
         master = self.master(plan_dir)
         self.assertIn("| C1 |", master)
         self.assertIn("Master version: 2", master)
+
+    def test_add_discovery_no_bump_skips_version_and_warning(self) -> None:
+        plan_dir = make_valid_plan(self.tmp, "ready")
+        result = run_cli(
+            self.tmp,
+            "add-discovery",
+            str(plan_dir),
+            "P1",
+            "Found a constraint",
+            "--affects",
+            "P1",
+            "--type",
+            "note",
+            "--action",
+            "Recorded",
+            "--no-bump",
+        )
+        self.assert_ok(result)
+        self.assertIn("Master version: 1", self.master(plan_dir))
+        self.assertNotIn(
+            "warning: master version bumped", result.stdout + result.stderr
+        )
 
 
 class CommitAndCloseTests(PlanTestCase):
