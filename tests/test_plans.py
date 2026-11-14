@@ -50,6 +50,219 @@ class PlanTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
+class ParserTests(unittest.TestCase):
+    def test_phase_rows_well_formed_and_malformed(self) -> None:
+        master = """## Phase map
+
+| ID | Phase | Outcome | Depends on | Status | Plan |
+|---|---|---|---|---|---|
+| P1 | Build | Add behavior | none | ready | [plan](p1) |
+| P9 | Broken |"""
+        self.assertEqual(
+            planlib.phase_rows(master),
+            [
+                {
+                    "id": "P1",
+                    "name": "Build",
+                    "outcome": "Add behavior",
+                    "depends": "none",
+                    "status": "ready",
+                    "plan": "[plan](p1)",
+                    "malformed": False,
+                    "raw": "| P1 | Build | Add behavior | none | ready | [plan](p1) |",
+                },
+                {
+                    "id": "P9",
+                    "name": "Broken",
+                    "outcome": "",
+                    "depends": "",
+                    "status": "",
+                    "plan": "",
+                    "malformed": True,
+                    "raw": "| P9 | Broken |",
+                },
+            ],
+        )
+
+    def test_ledger_rows_well_formed_and_malformed(self) -> None:
+        master = """## Discovery ledger
+
+| ID | Date | Phase | Affects | Discovery | Type | Action taken | Status |
+|---|---|---|---|---|---|---|---|
+| L1 | 2026-11-14 | P1 | P1 | Found a constraint | note | Recorded | open |
+| L9 | 2026-11-14 | P1 | P1 | Broken | note |"""
+        self.assertEqual(
+            planlib.ledger_rows(master),
+            [
+                {
+                    "id": "L1",
+                    "date": "2026-11-14",
+                    "phase": "P1",
+                    "affects": "P1",
+                    "discovery": "Found a constraint",
+                    "type": "note",
+                    "action": "Recorded",
+                    "status": "open",
+                    "malformed": False,
+                    "raw": "| L1 | 2026-11-14 | P1 | P1 | Found a constraint | note | Recorded | open |",
+                },
+                {
+                    "id": "L9",
+                    "date": "2026-11-14",
+                    "phase": "P1",
+                    "affects": "P1",
+                    "discovery": "Broken",
+                    "type": "note",
+                    "action": "",
+                    "status": "",
+                    "malformed": True,
+                    "raw": "| L9 | 2026-11-14 | P1 | P1 | Broken | note |",
+                },
+            ],
+        )
+
+    def test_decision_rows_well_formed_and_malformed(self) -> None:
+        master = """## Cross-phase decisions
+
+| ID | Date | Decision | Reason | Affects |
+|---|---|---|---|---|
+| C1 | 2026-11-14 | Use the parser | Less duplication | all |
+| C9 | 2026-11-14 | Broken |"""
+        self.assertEqual(
+            planlib.decision_rows(master),
+            [
+                {
+                    "id": "C1",
+                    "date": "2026-11-14",
+                    "decision": "Use the parser",
+                    "reason": "Less duplication",
+                    "affects": "all",
+                    "malformed": False,
+                    "raw": "| C1 | 2026-11-14 | Use the parser | Less duplication | all |",
+                },
+                {
+                    "id": "C9",
+                    "date": "2026-11-14",
+                    "decision": "Broken",
+                    "reason": "",
+                    "affects": "",
+                    "malformed": True,
+                    "raw": "| C9 | 2026-11-14 | Broken |",
+                },
+            ],
+        )
+
+    def test_closeout_history_rows_well_formed_and_malformed(self) -> None:
+        master = """## Closeout history
+
+| Phase | Date | Verdict | Criteria met | Commit | Report |
+|---|---|---|---|---|---|
+| P1 | 2026-11-14 | addressed | A1 | abc1234 | [report](p1) |
+| P9 | 2026-11-15 | partial | A1 |"""
+        self.assertEqual(
+            planlib.closeout_history_rows(master),
+            [
+                {
+                    "phase": "P1",
+                    "date": "2026-11-14",
+                    "verdict": "addressed",
+                    "criteria": "A1",
+                    "commit": "abc1234",
+                    "report": "[report](p1)",
+                    "malformed": False,
+                },
+                {
+                    "phase": "P9",
+                    "date": "2026-11-15",
+                    "verdict": "partial",
+                    "criteria": "A1",
+                    "commit": "",
+                    "report": "",
+                    "malformed": True,
+                },
+            ],
+        )
+
+    def test_definition_items_checked_unchecked_verify(self) -> None:
+        master = """## Definition of done
+
+- [x] D1 — The command prints ok — verify: `python3 -c "print('ok')"`
+- [ ] D2 — The command is tested
+- [X] D3 — The command is documented — verify: `readme exists`"""
+        self.assertEqual(
+            planlib.definition_items(master),
+            [
+                {
+                    "id": "D1",
+                    "checked": True,
+                    "text": 'The command prints ok — verify: `python3 -c "print(\'ok\')"`',
+                    "verify": '`python3 -c "print(\'ok\')"`',
+                },
+                {
+                    "id": "D2",
+                    "checked": False,
+                    "text": "The command is tested",
+                    "verify": "",
+                },
+                {
+                    "id": "D3",
+                    "checked": True,
+                    "text": "The command is documented — verify: `readme exists`",
+                    "verify": "`readme exists`",
+                },
+            ],
+        )
+
+    def test_acceptance_items_checked_unchecked_verify(self) -> None:
+        plan = """## Phase acceptance criteria
+
+- [x] A1 — The command prints ok — verify: `python3 -c "print('ok')"`
+- [ ] A2 — The command is tested
+- [X] A3 — The command is documented — verify: `readme exists`"""
+        self.assertEqual(
+            planlib.acceptance_items(plan),
+            [
+                {
+                    "id": "A1",
+                    "checked": True,
+                    "text": 'The command prints ok — verify: `python3 -c "print(\'ok\')"`',
+                    "verify": '`python3 -c "print(\'ok\')"`',
+                },
+                {
+                    "id": "A2",
+                    "checked": False,
+                    "text": "The command is tested",
+                    "verify": "",
+                },
+                {
+                    "id": "A3",
+                    "checked": True,
+                    "text": "The command is documented — verify: `readme exists`",
+                    "verify": "`readme exists`",
+                },
+            ],
+        )
+
+    def test_closeout_verdict_with_and_without_verdict(self) -> None:
+        plan = """## Closeout
+
+- Verdict: Addressed
+- Steps complete: S1
+"""
+        self.assertEqual(planlib.closeout_verdict(plan), "addressed")
+        self.assertIsNone(
+            planlib.closeout_verdict("""## Closeout
+
+- Steps complete: S1
+""")
+        )
+
+    def test_identifier_number(self) -> None:
+        self.assertEqual(planlib.identifier_number("P12"), 12)
+        self.assertEqual(planlib.identifier_number("L7"), 7)
+        self.assertEqual(planlib.identifier_number("master"), 0)
+
+
 class ScaffoldTests(PlanTestCase):
     def test_new_records_root_and_size(self) -> None:
         plan_dir = self.new_plan()
@@ -310,7 +523,7 @@ class CommitAndCloseTests(PlanTestCase):
         self.assert_ok(run_cli(self.tmp, "check", str(plan_dir)))
 
     def _close_ready(self, *, break_standards: bool = False) -> tuple[Path, str]:
-        head = init_git(self.tmp)
+        init_git(self.tmp)
         plan_dir = make_valid_plan(self.tmp, "in_progress", dod_checked=True)
         (self.tmp / "app.py").write_text("ok\n", encoding="utf-8")
         subprocess.run(["git", "add", "-A"], cwd=self.tmp, check=True)

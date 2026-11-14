@@ -13,7 +13,7 @@ characterization tests are the gate.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 001 | Consolidate plan parsing and identifier helpers | P1 | S/M | — | TODO |
+| 001 | Consolidate plan parsing and identifier helpers | P1 | S/M | — | DONE |
 | 002 | Split `validate_plan` into focused validation passes | P1 | M | 001 | TODO |
 | 003 | Consolidate markdown table location and rewrite helpers | P2 | M | 001 | TODO |
 | 004 | Extract master version and stale-phase maintenance helpers | P2 | S | 001, 003 | TODO |

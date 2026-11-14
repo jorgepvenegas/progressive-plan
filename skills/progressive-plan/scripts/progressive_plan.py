@@ -36,6 +36,7 @@ from planlib import (
     build_status,
     bump_int_field,
     closeout_rows,
+    closeout_verdict,
     commit_date,
     commit_exists,
     commit_is_ancestor,
@@ -47,6 +48,7 @@ from planlib import (
     field,
     git,
     git_root,
+    identifier_number,
     invalid_phase_refs,
     is_pending,
     ledger_rows,
@@ -601,11 +603,7 @@ def cmd_close(args: argparse.Namespace) -> None:
         )
     plan_text = set_field(plan_text, "Status", "done")
 
-    closeout = section(plan_text, "Closeout")
-    verdict_match = re.search(
-        r"^-\s*Verdict:\s*(\S+)", closeout, re.MULTILINE
-    )
-    verdict = verdict_match.group(1).strip().lower() if verdict_match else ""
+    verdict = closeout_verdict(plan_text) or ""
     if verdict != "addressed":
         fail(f"phase {args.phase} verdict is '{verdict or 'missing'}'; close requires addressed")
     met = [
@@ -714,7 +712,7 @@ def cmd_add_discovery(args: argparse.Namespace) -> None:
     action = _cell(args.action, "action")
     entries = ledger_rows(master)
     number = max(
-        (int(re.sub(r"\D", "", entry["id"]) or 0) for entry in entries), default=0
+        (identifier_number(entry["id"]) for entry in entries), default=0
     ) + 1
     entry_id = f"L{number}"
     row = (
@@ -756,7 +754,7 @@ def cmd_add_decision(args: argparse.Namespace) -> None:
     reason = _cell(args.reason, "reason")
     rows = decision_rows(master)
     number = max(
-        (int(re.sub(r"\D", "", row["id"]) or 0) for row in rows), default=0
+        (identifier_number(row["id"]) for row in rows), default=0
     ) + 1
     decision_id = f"C{number}"
     row = (

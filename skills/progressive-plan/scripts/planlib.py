@@ -153,6 +153,18 @@ def master_version(text: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def closeout_verdict(plan_text: str) -> str | None:
+    match = re.search(
+        r"^-\s*Verdict:\s*(\S+)", section(plan_text, "Closeout"), re.MULTILINE
+    )
+    return match.group(1).strip().lower() if match else None
+
+
+def identifier_number(value: str) -> int:
+    digits = re.sub(r"\D", "", value)
+    return int(digits) if digits else 0
+
+
 def link_target(cell: str) -> str:
     match = re.search(r"\(([^)]+)\)", cell)
     return match.group(1).strip() if match else cell.strip()
@@ -181,100 +193,66 @@ def placeholder_findings(text: str) -> list[str]:
     return findings
 
 
-def placeholder_count(text: str) -> int:
-    return len(placeholder_findings(text))
+def _table_rows(
+    text: str,
+    section_keyword: str,
+    row_pattern: str,
+    columns: tuple[str, ...],
+    *,
+    keep_raw: bool = False,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for line in section(text, section_keyword).splitlines():
+        if not re.match(row_pattern, line):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        malformed = len(cells) != len(columns)
+        padded = cells + [""] * (len(columns) - len(cells))
+        row = {name: padded[index] for index, name in enumerate(columns)}
+        row["malformed"] = malformed
+        if keep_raw:
+            row["raw"] = line
+        rows.append(row)
+    return rows
 
 
 def phase_rows(master_text: str) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for line in section(master_text, "Phase map").splitlines():
-        if not re.match(r"^\|\s*P\d+\s*\|", line):
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        malformed = len(cells) != 6
-        padded = cells + [""] * (6 - len(cells))
-        rows.append(
-            {
-                "id": padded[0],
-                "name": padded[1],
-                "outcome": padded[2],
-                "depends": padded[3],
-                "status": padded[4],
-                "plan": padded[5],
-                "malformed": malformed,
-                "raw": line,
-            }
-        )
-    return rows
+    return _table_rows(
+        master_text,
+        "Phase map",
+        r"^\|\s*P\d+\s*\|",
+        ("id", "name", "outcome", "depends", "status", "plan"),
+        keep_raw=True,
+    )
 
 
 def ledger_rows(master_text: str) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for line in section(master_text, "Discovery ledger").splitlines():
-        if not re.match(r"^\|\s*[A-Z]\d+\s*\|", line):
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        malformed = len(cells) != 8
-        padded = cells + [""] * (8 - len(cells))
-        rows.append(
-            {
-                "id": padded[0],
-                "date": padded[1],
-                "phase": padded[2],
-                "affects": padded[3],
-                "discovery": padded[4],
-                "type": padded[5],
-                "action": padded[6],
-                "status": padded[7],
-                "malformed": malformed,
-                "raw": line,
-            }
-        )
-    return rows
+    return _table_rows(
+        master_text,
+        "Discovery ledger",
+        r"^\|\s*[A-Z]\d+\s*\|",
+        ("id", "date", "phase", "affects", "discovery", "type", "action", "status"),
+        keep_raw=True,
+    )
 
 
 def decision_rows(master_text: str) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for line in section(master_text, "Cross-phase decisions").splitlines():
-        if not re.match(r"^\|\s*C\d+\s*\|", line):
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        malformed = len(cells) != 5
-        padded = cells + [""] * (5 - len(cells))
-        rows.append(
-            {
-                "id": padded[0],
-                "date": padded[1],
-                "decision": padded[2],
-                "reason": padded[3],
-                "affects": padded[4],
-                "malformed": malformed,
-                "raw": line,
-            }
-        )
-    return rows
+    return _table_rows(
+        master_text,
+        "Cross-phase decisions",
+        r"^\|\s*C\d+\s*\|",
+        ("id", "date", "decision", "reason", "affects"),
+        keep_raw=True,
+    )
 
 
 def closeout_history_rows(master_text: str) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for line in section(master_text, "Closeout history").splitlines():
-        if not re.match(r"^\|\s*P\d+\s*\|", line):
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        malformed = len(cells) != 6
-        padded = cells + [""] * (6 - len(cells))
-        rows.append(
-            {
-                "phase": padded[0],
-                "date": padded[1],
-                "verdict": padded[2],
-                "criteria": padded[3],
-                "commit": padded[4],
-                "report": padded[5],
-                "malformed": malformed,
-            }
-        )
-    return rows
+    return _table_rows(
+        master_text,
+        "Closeout history",
+        r"^\|\s*P\d+\s*\|",
+        ("phase", "date", "verdict", "criteria", "commit", "report"),
+    )
 
 
 def expand_phase_refs(value: str) -> set[str]:
@@ -335,52 +313,41 @@ def mentioned_ledger_ids(plan_text: str) -> set[str]:
     return ids
 
 
-def definition_items(master_text: str) -> list[dict[str, Any]]:
+def _checklist_items(
+    text: str, section_keyword: str, id_pattern: str
+) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
-    for line in section(master_text, "Definition of done").splitlines():
-        match = re.match(
-            r"^\s*-\s*\[([ xX])\]\s*(D\d+)\s*(?:[—:-]\s*)?(.*)$", line
-        )
+    pattern = (
+        r"^\s*-\s*\[([ xX])\]\s*("
+        + id_pattern
+        + r")\s*(?:[—:-]\s*)?(.*)$"
+    )
+    for line in section(text, section_keyword).splitlines():
+        match = re.match(pattern, line)
         if not match:
             continue
-        text = match.group(3).strip()
+        item_text = match.group(3).strip()
         verify = ""
-        verify_match = re.search(r"verify:\s*(.+)$", text, re.IGNORECASE)
+        verify_match = re.search(r"verify:\s*(.+)$", item_text, re.IGNORECASE)
         if verify_match:
             verify = verify_match.group(1).strip()
         items.append(
             {
                 "id": match.group(2),
                 "checked": match.group(1).lower() == "x",
-                "text": text,
+                "text": item_text,
                 "verify": verify,
             }
         )
     return items
+
+
+def definition_items(master_text: str) -> list[dict[str, Any]]:
+    return _checklist_items(master_text, "Definition of done", r"D\d+")
 
 
 def acceptance_items(plan_text: str) -> list[dict[str, Any]]:
-    items: list[dict[str, Any]] = []
-    for line in section(plan_text, "Phase acceptance criteria").splitlines():
-        match = re.match(
-            r"^\s*-\s*\[([ xX])\]\s*(A\d+)\s*(?:[—:-]\s*)?(.*)$", line
-        )
-        if not match:
-            continue
-        text = match.group(3).strip()
-        verify = ""
-        verify_match = re.search(r"verify:\s*(.+)$", text, re.IGNORECASE)
-        if verify_match:
-            verify = verify_match.group(1).strip()
-        items.append(
-            {
-                "id": match.group(2),
-                "checked": match.group(1).lower() == "x",
-                "text": text,
-                "verify": verify,
-            }
-        )
-    return items
+    return _checklist_items(plan_text, "Phase acceptance criteria", r"A\d+")
 
 
 def step_items(plan_text: str) -> list[dict[str, Any]]:
@@ -1028,11 +995,7 @@ def validate_plan(
                             f"{plan_file}: commit {commit_hash} is not an ancestor of HEAD"
                         )
 
-            closeout = section(plan, "Closeout")
-            verdict_match = re.search(
-                r"^-\s*Verdict:\s*(\S+)", closeout, re.MULTILINE
-            )
-            verdict = verdict_match.group(1).strip().lower() if verdict_match else ""
+            verdict = closeout_verdict(plan) or ""
             if verdict not in VALID_VERDICTS:
                 errors.append(
                     f"{plan_file}: done phase has no valid closeout verdict "
@@ -1134,7 +1097,7 @@ def validate_plan(
                 "master: all phases are done but definition-of-done is unchecked: "
                 + ", ".join(unchecked)
             )
-        final_row = max(rows, key=lambda row: int(re.sub(r"\D", "", row["id"]) or 0))
+        final_row = max(rows, key=lambda row: identifier_number(row["id"]))
         final_file = phase_plan_files.get(final_row["id"])
         if final_file and final_file.exists():
             final_plan = read_text(final_file)
@@ -1175,7 +1138,7 @@ def current_phase_id(
     if rows:
         done = [row for row in rows if row["status"] == "done"]
         if done:
-            return max(done, key=lambda row: int(re.sub(r"\D", "", row["id"]) or 0))["id"]
+            return max(done, key=lambda row: identifier_number(row["id"]))["id"]
     brief = section(master, "Resume brief")
     match = re.search(r"^-\s*Current phase:\s*(P\d+)", brief, re.MULTILINE)
     return match.group(1) if match else None
@@ -1291,10 +1254,7 @@ def build_resume_report(
         approved_by = field(plan, "Approved by")
         approved_at = field(plan, "Approved at")
         commit = field(plan, "Commit")
-        verdict_match = re.search(
-            r"^-\s*Verdict:\s*(\S+)", section(plan, "Closeout"), re.MULTILINE
-        )
-        verdict = verdict_match.group(1).strip().lower() if verdict_match else None
+        verdict = closeout_verdict(plan)
         acceptance = acceptance_items(plan)
         met = [item["id"] for item in acceptance if item["checked"]]
         pending = [item["id"] for item in acceptance if not item["checked"]]
@@ -1531,7 +1491,7 @@ def render_report(plan_dir: Path) -> str:
     done_rows = [row for row in rows if row["status"] == "done"]
     if done_rows:
         final_row = max(
-            done_rows, key=lambda row: int(re.sub(r"\D", "", row["id"]) or 0)
+            done_rows, key=lambda row: identifier_number(row["id"])
         )
         final_file = phase_plan_path(plan_dir, final_row)
         if final_file.exists():
