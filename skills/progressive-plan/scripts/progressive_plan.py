@@ -768,6 +768,16 @@ def cmd_add_decision(args: argparse.Namespace) -> None:
     master = set_field(master, "Master version", str(version + 1))
     write_text(master_file, master)
     print(f"added {decision_id} to {master_file}")
+    stale = [
+        row["id"]
+        for row in phase_rows(master)
+        if row["status"] in {"ready", "in_progress"}
+    ]
+    if stale:
+        print(
+            "warning: master version bumped; revalidate these phases: "
+            + ", ".join(stale)
+        )
 
 
 def cmd_status(args: argparse.Namespace) -> None:
