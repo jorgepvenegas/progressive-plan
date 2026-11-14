@@ -1155,6 +1155,10 @@ def build_status(plan_dir: Path, phase_override: str | None = None) -> dict[str,
     rows = phase_rows(master)
     check = validate_plan(plan_dir)
     current = current_phase_id(master, rows, phase_override)
+    if phase_override and not any(row["id"] == phase_override for row in rows):
+        check["errors"].append(
+            f"phase {phase_override} is not in the master phase map"
+        )
     current_row = next((row for row in rows if row["id"] == current), None)
     brief = section(master, "Resume brief").strip()
     brief_phase_match = re.search(

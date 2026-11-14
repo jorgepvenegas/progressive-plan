@@ -428,7 +428,7 @@ def cmd_reopen(args: argparse.Namespace) -> None:
     plan_text = bump_int_field(plan_text, "Plan version", 1)
     master = _set_phase_status(master, args.phase, "planned")
     other_active = any(
-        item["status"] in {"ready", "in_progress", "done"}
+        item["status"] in {"ready", "in_progress", "done", "blocked", "needs_replan"}
         for item in phase_rows(master)
     )
     master = set_field(master, "Status", "active" if other_active else "draft")
@@ -849,7 +849,10 @@ def cmd_scope(args: argparse.Namespace) -> None:
     base = _resolve_base(plan_dir, row, args.base)
     changed = git(repo, "diff", "--name-only", f"{base}..HEAD") or ""
     changed_files = [line for line in changed.splitlines() if line.strip()]
-    plan_relative = plan_dir.resolve().relative_to(repo.resolve()).as_posix()
+    try:
+        plan_relative = plan_dir.resolve().relative_to(repo.resolve()).as_posix()
+    except ValueError:
+        fail(f"{plan_dir} is outside the git repository {repo}")
     out_of_scope = [
         path
         for path in changed_files
