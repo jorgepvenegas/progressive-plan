@@ -13,6 +13,7 @@
 - Implemented at: pending
 - Exception approved by: none
 - Exception reason: none
+- Parallel safe: no
 - Depends on: {{DEPENDS_ON}}
 - Written: {{DATE}}
 - Master plan: [master.md](../../master.md)
@@ -92,7 +93,7 @@ Append during implementation. One line per deviation: date, step, what changed, 
 
 ## 10. Closeout
 
-Fill at the end of every implementation session. Do not mark the phase done until this section is complete and the master is updated.
+Fill at the end of every implementation session. Do not mark the phase done until this section is complete and the master is updated. Set `Implemented by` to the worker name or ID and `Implemented at` to the implementation date; `close` requires both.
 
 - Date:
 - Session:

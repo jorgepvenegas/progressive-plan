@@ -14,15 +14,19 @@ Use this with `scripts/resume_status.py`. Tick every item before the first edit.
 ## Approval and implementation
 
 - [ ] `Approved by` and `Approved at` are set for the current phase.
-- [ ] `Implementation mode` is `subagent`, or a coordinator exception has an approving user.
+- [ ] `Implementation mode` is `subagent`, or a coordinator exception has an approving user and a reason.
 - [ ] The current phase is `in_progress` only after approval.
 - [ ] If not approved, the next action is to ask the user, not to implement.
+- [ ] For a done phase, `Implemented by` and `Implemented at` are set.
+- [ ] For a done phase, every A and claimed D has a `met` closeout row with evidence, and every code-standards box is checked.
 
 ## Repository state
 
 - [ ] `git status` reviewed; uncommitted files identified and preserved.
 - [ ] `git log --oneline -10` reviewed.
 - [ ] The current phase's recorded commit exists and is an ancestor of HEAD (or no commit is expected yet).
+- [ ] The current branch matches the master `Branch:` field.
+- [ ] `scope <plan-dir> <phase>` reports no out-of-scope changed files, or each exception is reported.
 - [ ] The working tree is clean, or the dirty files are current-phase work.
 - [ ] No secrets, database files, build output, or `node_modules` are staged.
 

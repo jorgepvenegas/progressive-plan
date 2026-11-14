@@ -1,13 +1,13 @@
 ---
 name: progressive-plan
-description: Plan and execute coding work of any size through a master plan and phases, with issue intake, scope sizing, approval gates, subagent implementation, and closeout. Use when starting from a GitHub or Linear issue or a request, when a task needs scoping and acceptance criteria, for a small one-phase task, or for large multi-phase work with just-in-time sub-plans.
+description: Plan and execute coding work through a master plan, just-in-time phase plans, per-phase approval, delegated implementation, evidence-based closeout, and commits. Use for an issue, request, small task, or multi-phase project.
 ---
 
 # Progressive Plan
 
 Start from the source issue or request, size the work, and choose a one-phase plan for small tasks or a multi-phase master for large ones. A master plan states the outcome and splits the work into phases. Each phase gets a detailed sub-plan written just before it starts. No phase implementation begins until the user has seen that phase's plan and explicitly approved it. Every approved phase is implemented by a subagent; the coordinator plans, reviews, and closes out, but does not write product code. At the end of every implementation session, the agent proves what the master plan owed, records what no earlier plan predicted, updates the master plan, commits the phase, and only then calls the phase done.
 
-This skill is the coordinator's operating loop. It works for one agent doing all the work and for a coordinator delegating phases to subagents.
+This skill is the coordinator's operating loop. It works for one agent doing all the work and for a coordinator delegating phases to subagents. The shared gate rules are in `references/gates.md`.
 
 ## Artifacts
 
@@ -21,25 +21,38 @@ docs/plans/<slug>/
 
 - `master.md` is the contract and the map. The coordinator owns it.
 - `phases/NN-<name>/plan.md` is one phase's executable plan plus its closeout record. One phase per file.
-- Later phases stay as outlines in the master until their plan is written. Do not write every sub-plan up front; discoveries would invalidate them before use.
+- Later phases stay as outlines in the master until their plan is written. Add them with `add-phase --outline`, then write the plan with `write-plan` just before the phase starts. Do not write every sub-plan up front; discoveries would invalidate them before use.
 
 Before scaffolding a new plan, create its branch (see Branch and PR gates).
 
-Scaffold and validate:
+## Commands
 
-```bash
-python3 <skill-dir>/scripts/progressive_plan.py new "<Title>" --root docs/plans
-python3 <skill-dir>/scripts/progressive_plan.py add-phase docs/plans/<slug> "<Phase name>" --depends P1
-python3 <skill-dir>/scripts/progressive_plan.py approve docs/plans/<slug> P2 --by "<user>"
-python3 <skill-dir>/scripts/progressive_plan.py record-commit docs/plans/<slug> P2
-python3 <skill-dir>/scripts/progressive_plan.py discoveries docs/plans/<slug> P3
-python3 <skill-dir>/scripts/progressive_plan.py check docs/plans/<slug>
-python3 <skill-dir>/scripts/progressive_plan.py status docs/plans/<slug>
-```
+Run these from the repository root. Each command is `python3 <skill-dir>/scripts/progressive_plan.py <command>`. `<skill-dir>` is the directory containing this `SKILL.md`. Use the repository's existing plans directory if it has one; `docs/plans` is the default.
 
-`<skill-dir>` is the directory containing this `SKILL.md`. Use the repository's existing plans directory if it has one; `docs/plans` is the default.
+| Command | Use |
+|---|---|
+| `new "<Title>" --root docs/plans --size small` | Create the master; `--size` is `small`, `medium`, or `large`. |
+| `add-phase <plan-dir> "<Name>" --depends P1 --outcome "<text>"` | Add a phase row and a draft plan. |
+| `add-phase <plan-dir> "<Name>" --outline` | Add only a `planned` row; write the plan later. |
+| `write-plan <plan-dir> P2` | Create the plan for an outline phase. |
+| `approve <plan-dir> P2 --by "<user>"` | Validate, record approval, and set the phase `ready`. |
+| `approve ... --allow-unmet-dependency` | Approve intentional parallel work before its dependencies are done. |
+| `reopen <plan-dir> P2` | Reset a phase to `draft` for refinement. |
+| `record-commit <plan-dir> P2 --by <worker>` | Record the phase commit and implementer. |
+| `close <plan-dir> P2 --by <worker>` | Set the phase and master to `done`, write the closeout history, and validate. |
+| `add-discovery <plan-dir> P2 "<text>" --affects P2 --type note --action "<text>"` | Append a typed discovery row and bump the master version. |
+| `add-decision <plan-dir> "<text>" --reason "<why>" --affects all` | Append a cross-phase decision and bump the master version. |
+| `discoveries <plan-dir> P2` | List ledger rows that affect the phase. |
+| `scope <plan-dir> P2 [--base REF]` | Compare changed files with the phase plan's `Files:` lists. |
+| `report <plan-dir>` | Print a plan or draft-PR report. |
+| `check <plan-dir> [--strict]` | Validate structure, content, coverage, standards, and commits. |
+| `status <plan-dir> [--json]` | Print the phase table, check result, and next action. |
 
-To resume an existing plan, run `status` first: it prints the phase table and the resume brief. Then read `master.md` and the current phase plan.
+`check` fails an unfilled `ready` or `done` plan. `--strict` turns warnings into errors for CI. `--json` is available on `check`, `status`, `scope`, and `report`.
+
+`add-phase` appends a row and assigns the next phase ID. IDs are creation order; the `Depends on` column is the execution order. Add phases in dependency order, or edit the phase map to reorder them deliberately.
+
+To resume an existing plan, run `status` first, then `plan-resume`. Read `master.md` and the current phase plan.
 
 ## Task intake and sizing
 
@@ -111,22 +124,7 @@ For a small task, keep the intake to a few lines. Link to the issue instead of c
 
 ## Code standards
 
-The repository owns its standards. Read `AGENTS.md`/`CLAUDE.md`, contributor docs, tooling config, and nearby code; record the exact checks in the master. Do not restate a style guide in the plan.
-
-Every phase and every step follows these rules:
-
-- **Smallest change.** Add only what the acceptance criteria require. No speculative abstraction, extension point, configuration, or dependency (YAGNI).
-- **Reuse before writing.** Use an existing helper or pattern when it fits. Remove duplication the change creates, but do not build a framework for two similar lines (DRY).
-- **Expressive code.** Names state intent and units; a function or module does one job. No dead code, commented-out code, or unused exports.
-- **Comments explain why.** Write a comment only for a non-obvious constraint, workaround, or trade-off that the code cannot show. Do not narrate what the code does, restate a name, or keep a changelog in comments.
-- **Tests are evidence.** A test asserts observable behavior or a failure the requirements name. Do not add a test that restates the implementation, repeats another test's assertion, or would still pass if the behavior broke. Test behavior, not internal calls.
-- **No drive-by cleanup.** Leave unrelated code, formatting, names, and dependencies alone. Report the problem instead.
-
-Enforcement:
-
-- The master records the project's standards commands (format, lint, type check, tests). Each phase verification includes the commands that cover the changed code.
-- The worker runs those commands, records the result in the phase plan's `Code standards check`, and reports any rule it cannot meet. It does not weaken the rule.
-- The coordinator reviews the diff for duplicated logic, speculative abstraction, dead code, comment noise, and tautological tests. A green test suite does not excuse a violation.
+The repository owns its standards. Read `AGENTS.md`/`CLAUDE.md`, contributor docs, tooling config, and nearby code; record the exact checks in the master. Every phase follows the smallest-change, reuse, expressive-code, comments-explain-why, tests-are-evidence, and no-drive-by-cleanup rules. `approve` requires the checklist; `close` requires every item checked. The full rules and enforcement are in `references/code-standards.md`.
 
 ## Branch and PR gates
 
@@ -150,7 +148,7 @@ Create the branch before writing `master.md`:
 4. Record `- Branch: plan/<slug>` in the master header.
 5. If the repository is not a git repository, record that and continue without a branch. A missing remote does not block a local branch; it only blocks the draft PR at the end.
 
-Do not create a plan branch in the middle of an existing plan. If a plan is already in progress and the current branch does not match the recorded branch, stop and report.
+Do not create a plan branch in the middle of an existing plan. If a plan is already in progress and the current branch does not match the recorded branch, stop and report. `new` warns when the current branch is not `plan/<slug>`; `resume_status.py` warns about a mismatch with the recorded `Branch:` field.
 
 ### End of plan
 
@@ -169,7 +167,7 @@ After the final phase is `done`, every definition-of-done item is met, any `reco
    gh pr create --draft --base <default-branch> --head plan/<slug> \
      --title "<plan title>" --body-file <temp-file>
    ```
-4. Write the PR body from the master, not from conversation. Include the objective, the definition-of-done checklist with verdicts, the phase table, verification commands and results, known issues and risks, and the plan directory path.
+4. Write the PR body from `progressive_plan.py report <plan-dir>`, not from conversation. It includes the objective, definition-of-done checklist, phase table, closeout history, validation, and plan directory path.
 5. Record the PR URL in the master resume brief and report it.
 
 If `gh` is missing, unauthenticated, or there is no remote, report the limitation and leave the branch pushed or local as the user prefers. Do not fail the plan closeout.
@@ -192,22 +190,25 @@ The master plan must contain:
 - **Goal flow** — a high-level Mermaid diagram of the user-visible outcome, for the person approving phases. Keep it to the main path; implementation detail belongs in the phase plans.
 - **Definition of done** — numbered `D1..Dn`, each observable and each with a verification command or observation.
 - **Non-goals** — adjacent work explicitly excluded.
+- **Code standards** — the project's real format, lint, type-check, and test commands.
 - **Current state** — evidence from the repository: files, symbols, baseline results, assumptions, unknowns.
 - **Phase map** — phases ordered by dependency, each with a one-line outcome, exit criteria, and status.
 - **Cross-phase decisions** — append-only decisions that constrain more than one phase.
+- **Discovery ledger** — typed rows with `Affects`, action, and status.
+- **Closeout history** and **Resume brief** — the evidence trail and the next legal action.
 
 Phase sizing:
 
 - A phase is a coherent increment that leaves the repository in a verifiable state and fits roughly one focused session.
 - A phase has one outcome, not a bucket of unrelated steps. If it touches unrelated subsystems or needs more than about seven steps, split it.
-- Phases are ordered by dependency. Mark phases that are safe to run in parallel and name the shared files that make them unsafe.
+- Phases are ordered by dependency. A phase that is safe to run before its dependencies finish needs `Parallel safe: yes` in its plan and `approve --allow-unmet-dependency`. Name the shared files that make parallel phases unsafe.
 - A phase is not a step. Steps live in the phase sub-plan.
 
 Check the master before moving on: can a new agent tell why the plan exists, when the whole task is done, which phase is next, and what each phase owes? If not, rewrite it.
 
 ### 2. Write the phase sub-plan just in time
 
-Before starting phase `Pn`, write `phases/NN-<name>/plan.md`. Do not start implementation from the master outline.
+Before starting phase `Pn`, write `phases/NN-<name>/plan.md`. If the master has only an outline, run `progressive_plan.py write-plan <plan-dir> Pn`. Do not start implementation from the master outline.
 
 - Read the master plan fresh, not from memory.
 - Apply every discovery-ledger row that affects this phase before writing steps. Run `progressive_plan.py discoveries <plan-dir> <phase-id>`, then list every returned row in `Prior discoveries applied` with how it changes a step or acceptance criterion. Write `None` only when the command returns none.
@@ -219,6 +220,8 @@ Before starting phase `Pn`, write `phases/NN-<name>/plan.md`. Do not start imple
 
 Leave the phase status `draft` and the master row `planned` while the plan is being written. A completed plan is **not** approval to implement.
 
+A plan is ready for approval only when it has no template placeholders, at least one step, one phase acceptance criterion, and one traceability row for every criterion, plus a `Prior discoveries applied` row for every affecting ledger entry. `approve` enforces these checks and refuses an unfilled plan.
+
 ### Approval gate (required before every phase)
 
 A phase may move to `ready` only after the user has seen its plan and explicitly approved it. This gate applies to every phase, including phases that look small or obvious.
@@ -226,9 +229,9 @@ A phase may move to `ready` only after the user has seen its plan and explicitly
 1. Finish the phase plan and run `check`. Keep the phase `draft` / master `planned`. If `check` reports a missing master section, repair the master from `references/master-template.md` before asking for approval. Do not mark the phase ready while `check` fails.
 2. Send the user a short review request: absolute plan path, phase outcome, acceptance criteria, and the top risks. Ask directly: "Approve implementation of phase Pn?"
 3. Wait. Do not edit implementation files, set `in_progress`, or spawn a worker for that phase. If the user asks for changes instead of approving, use the `refine-phase` skill (sibling directory); keep the phase `draft` and return to this gate after the refinement.
-4. On explicit approval, run `progressive_plan.py approve <plan-dir> <phase-id> --by "<user>"`. This writes `Approved by` and `Approved at`, sets the phase and master row to `ready`, and validates the plan.
+4. On explicit approval, run `progressive_plan.py approve <plan-dir> <phase-id> --by "<user>"`. It validates the content and coverage, resets stale implementation fields, writes `Approved by` and `Approved at`, sets the phase and master row to `ready`, and sets the master status to `active`.
 5. Only then set the phase `in_progress` in the master and start step 1.
-6. Approval of one phase does not approve any later phase. Repeat the gate for every phase.
+6. Approval of one phase does not approve any later phase. Repeat the gate for every phase. If the user requests changes instead of approving, use `refine-phase`; if the phase was already ready, run `reopen` first.
 
 Silence, a prior "keep going", approval of the master plan, or approval of an earlier phase is **not** approval of the current phase. Do not infer it. If the user asks to skip review, record that instruction in the phase plan and master before starting.
 
@@ -240,7 +243,7 @@ Silence, a prior "keep going", approval of the master plan, or approval of an ea
 2. Set the phase `in_progress` in the master and in the phase plan before spawning.
 3. Spawn one subagent for the phase with the prompt from `references/worker-prompt-template.md`, filled with absolute paths, the phase ID, the scope fence, and the approval record. Use your harness's subagent mechanism: in prime-agent, `await rlm.spawn(prompt, name="p3-dashboard-ui")`; in Claude Code, the Task tool; in Pi, the `pi-subagents` tools. Keep the handle or task ID.
 4. Wait for the worker's reply. Do not implement the phase while waiting. Do not start a second worker on the same phase or the same shared files.
-5. Review the worker's output yourself: read the changed files against the phase plan's file lists, run the phase verification and the master's standards commands, inspect the commit, and read the closeout. Check the diff for duplicated logic, speculative abstraction, dead code, comment noise, and tautological tests. A silent worker is not a failed worker; verify before deciding.
+5. Review the worker's output yourself: read the changed files against the phase plan's file lists, run `progressive_plan.py scope <plan-dir> <phase>`, run the phase verification and the master's standards commands, inspect the commit, and read the closeout. Check the diff for duplicated logic, speculative abstraction, dead code, comment noise, and tautological tests. A silent worker is not a failed worker; verify before deciding.
 6. If the worker is blocked or wrong, send it a correction or spawn a replacement. Do not take over the implementation.
 
 ### Scope discipline and new work
@@ -257,11 +260,11 @@ When implementation discovers more work, classify it before touching code:
 
 New-phase procedure:
 
-1. Record a ledger row with type `new-phase` and `Affects` set to the new phase ID (or the phase that will own it).
-2. Add the phase to the phase map with a one-line outcome and dependencies, status `planned`. Use `progressive_plan.py add-phase` when available, then bump the master version and set the new plan's `Validated against master version` to the new value.
+1. Record a ledger row with `progressive_plan.py add-discovery <plan-dir> <phase> "<discovery>" --affects <new-phase> --type new-phase --action "<action>"`.
+2. Add the phase to the phase map with `progressive_plan.py add-phase <plan-dir> "<name>" --depends <deps> --outcome "<outcome>" --outline`. The command bumps the master version and creates the row; do not write the detailed plan yet.
 3. Do not write its detailed plan until the current phase is closed, unless it must run first; in that case stop and ask the user about order.
 4. Keep the current phase's closeout scoped to its own acceptance criteria. Note the new phase ID under remaining work.
-5. Review the current diff for scope drift: changed files must match the phase plan's file lists. If the worker added out-of-scope code, stop and remove it or ask.
+5. Review the current diff for scope drift with `progressive_plan.py scope <plan-dir> <phase>`. If the worker added out-of-scope code, stop and remove it or ask.
 
 The coordinator must not let a worker expand the phase. If the worker already made out-of-scope changes, do not accept the commit; revert the out-of-scope files and re-run verification.
 
@@ -303,6 +306,8 @@ On the final phase, cover every definition-of-done item in the master. Any unadd
 
 `new-phase` discoveries are added to the master phase map in the same closeout with status `planned`. They are not implemented in the current phase.
 
+Record each row with `progressive_plan.py add-discovery`, which validates the type, status, and `Affects`, appends the row, and bumps the master version. Do not hand-edit the table.
+
 **Propagation rule.** Every ledger row must record `Affects`: `all`, one phase ID, or a comma-separated list/range such as `P3–P5`. When a discovery appears, set `Affects` immediately; do not leave it blank.
 
 - Before approving a phase, run `progressive_plan.py discoveries <plan-dir> <phase-id>` and put every returned row in that phase plan's `Prior discoveries applied` table.
@@ -312,8 +317,8 @@ On the final phase, cover every definition-of-done item in the master. Any unadd
 
 **F. Write the updates, in this order:**
 
-1. **Phase plan** — step status and evidence, deviations, and the complete `Closeout` section with the verdict and discovery table.
-2. **Master plan** — phase status, discovery-ledger rows, decisions, definition-of-done changes, phase-map changes, closeout-history row, and the resume brief. Bump `Master version` on any semantic change.
+1. **Phase plan** — step status and evidence, deviations, and the complete `Closeout` section with the verdict and discovery table. Set `Implemented by` and `Implemented at`.
+2. **Master plan** — discovery-ledger rows, decisions, definition-of-done changes, phase-map changes, closeout-history row, and the resume brief. Use `add-discovery` and `add-decision`; they bump `Master version`. Status and closeout-history changes are written by `close`.
 3. **Following phase** — apply the amendment and every relevant discovery-ledger row now. Bump its `Plan version`, update `Prior discoveries applied`, and set `Validated against master version` to the new master version. If the change is too large for a targeted edit, set the phase `needs_replan` and state what must be rewritten.
 4. **Any other phase** whose assumptions the discovery invalidated. Update it or mark it `needs_replan`; never leave a stale plan marked `ready`.
 
@@ -325,7 +330,7 @@ Do not update a future plan from memory. Open the file and edit it.
 - `partial` — a criterion is unmet or deferred, or the session ended early. The phase stays `in_progress`. Record what remains and the next action.
 - `blocked` — an external dependency or unresolved decision stops work. Set the phase `blocked` and name the owner and the unblocking condition.
 
-A phase is not done because its steps are done. It is done when the master plan says what the phase owed and evidence proves it.
+A phase is not done because its steps are done. It is done when the master plan says what the phase owed and evidence proves it. Run `close`; it refuses a non-`addressed` verdict, missing coverage, an open code-standards check, or a missing implementer.
 
 ### 5. Commit the phase
 
@@ -342,14 +347,15 @@ A phase is not wrapped up until its work is committed. Do this after the closeou
    git add -A
    git commit -m "P<n>: <phase name>"
    ```
-3. Record the commit hash in the phase plan and validate:
+3. Record the commit and implementer, then close the phase:
    ```bash
-   python3 <skill-dir>/scripts/progressive_plan.py record-commit docs/plans/<slug> P<n>
+   python3 <skill-dir>/scripts/progressive_plan.py record-commit docs/plans/<slug> P<n> --by <worker>
+   python3 <skill-dir>/scripts/progressive_plan.py close docs/plans/<slug> P<n> --by <worker>
    python3 <skill-dir>/scripts/progressive_plan.py check docs/plans/<slug>
    ```
-4. Put the short hash in the master closeout-history row. `check` fails a `done` phase with no recorded commit.
-5. `record-commit` edits the plan files after the commit. Commit that small metadata change separately (`P<n>: record closeout commit`) or include it in the next phase's commit. Never amend the phase commit, because amending changes the hash.
-6. Do not start the next phase until the commit exists and is recorded.
+   `record-commit` rejects a `HEAD` whose subject does not start with `P<n>:`. Use `--hash` when the phase commit is not `HEAD`. `close` sets the phase and master to `done`, writes the closeout history, and validates the result.
+4. `record-commit` and `close` edit the plan files after the phase commit. Commit that small metadata change separately (`P<n>: record closeout`) or include it in the next phase's commit. Never amend the phase commit, because amending changes the hash.
+5. Do not start the next phase until `close` succeeds and `check` passes.
 
 If the session ends `partial` or `blocked`, commit a WIP checkpoint with the same message plus `[WIP]`, record the hash, and state what remains. If the user explicitly forbids commits, record that exemption in the phase plan and master before proceeding; the gate is otherwise mandatory.
 
@@ -357,70 +363,42 @@ If the session ends `partial` or `blocked`, commit a WIP checkpoint with the sam
 
 Update the resume brief in the master: current phase, last verdict, next action, open decisions. Write the next phase plan only when the previous phase is closed, then stop at the approval gate and ask the user. The next session starts with the `plan-resume` skill, which reads the master plan, the current phase plan, the git state, and the recorded commit; do not rely on conversation history that a later session will not have.
 
-When the final phase is `done` and every definition-of-done item is met, follow the End of plan gate in Branch and PR gates: ask whether to push and open a draft PR. Record the answer and the PR URL in the master.
+Run `progressive_plan.py status <plan-dir>` to confirm the next legal action. When the final phase is `done` and every definition-of-done item is met, run `report <plan-dir>` and follow the End of plan gate in Branch and PR gates: ask whether to push and open a draft PR. Offer the generated report as the PR body.
 
 ## User-facing closeout report
 
-End every closeout with a short report in this shape:
-
-```text
-Phase P2 closeout — <phase name>
-Verdict: addressed | partial | blocked
-Master coverage: D1 met (<evidence>), D2 partial (<gap>), D3 not started
-Discoveries no earlier plan predicted: <one line each, or "none">
-Plan updates: master v3 (<rows/sections changed>); P3 plan v2 (<sections changed>)
-Standards: passed | <unmet rule and reason>
-Commit: <short hash>
-Branch: plan/<slug>
-Next action: <one concrete action>
-```
-
-Lead with the verdict and the coverage result. Do not bury a partial verdict under a list of completed steps.
+End every closeout with the verdict, master coverage, discoveries, plan updates, standards result, commit, branch, and next action. The exact shape is in `references/closeout-report.md`. Lead with the verdict and coverage result; do not bury a partial verdict under completed steps.
 
 ## Orchestrating subagents
 
-Subagent implementation is mandatory for every approved phase. The coordinator handles planning, approval, review, and master updates.
-
-- The coordinator owns `master.md`. A worker owns one phase plan at a time and the implementation files listed in that plan.
-- Never let two agents write `master.md`, claim the same phase, or edit the same shared files.
-- Spawn the worker only after approval. The prompt must include absolute paths to `master.md` and the phase plan, the phase ID, the scope fence, the approval record (`Approved by`, `Approved at`), and the instruction to implement, verify, write the phase-plan closeout, commit, and report verdict plus discoveries.
-- Use the `references/worker-prompt-template.md` file. Do not improvise a shorter prompt that omits the approval or the scope fence.
-- Use the harness's own delegation API: in prime-agent, `rlm.spawn(prompt, name=...)` returns a handle and the worker replies through `agent_message`; in Claude Code, spawn a Task; in Pi, use `pi-subagents`. Keep whatever handle, task ID, or result channel the harness returns, and recover it after a restart or compaction.
-- The worker may update its phase plan but not `master.md`. It reports master-level changes to the coordinator; the coordinator applies them and marks the phase done.
-- The worker commits the phase after closeout and reports the short hash. The coordinator verifies the hash and runs `record-commit` while updating the master.
-- Run phases in parallel only when the master says they are independent and their file sets do not collide.
-- Verify a silent worker's output before assuming failure: read the phase plan, changed files, commit, and test output, then decide.
+Subagent implementation is mandatory for every approved phase. The coordinator owns `master.md`; one worker owns one phase plan and the files listed in it. Spawn only after approval, with the full worker prompt and the scope fence. Run phases in parallel only when the master marks them independent and their file sets do not collide. Verify a silent worker's files, commit, and tests before assuming failure. The full rules are in `references/orchestration.md`.
 
 ## Failure modes to avoid
 
-- **Plan theater** — phases with no observable exit; the project can never be declared done.
-- **Big-design-up-front** — writing every sub-plan before the first phase. The later plans are fiction.
-- **Silent replan** — rewriting the master during implementation to match what was built instead of recording the discovery and its cause.
-- **Discovery dump** — listing observations without a type, an action, or an owner.
-- **Coverage by assertion** — marking a criterion met without a command, test, or file evidence.
-- **Phase drift** — doing the next phase's work early because it is convenient.
-- **Optimistic closeout** — `addressed` with deferred criteria and no user approval.
-- **Stale plans** — a master version bump that leaves the next phase marked `ready` against an older version.
-- **Discovery loss** — writing a phase plan without carrying forward the ledger rows that affect it, or leaving a ledger row without an `Affects` value.
-- **Unauthorized start** — implementing a phase whose plan the user has not explicitly approved.
-- **Coordinator implementation** — writing product code in the coordinator instead of delegating an approved phase to a subagent. Exceptions require explicit user approval and a recorded exception.
-- **Approval by assumption** — treating silence, a prior "keep going", approval of the master plan, or approval of an earlier phase as approval of the current phase.
-- **Approval theater** — marking a phase `ready` without running the approval command and recording who approved it.
-- **Uncommitted closeout** — marking a phase done with no commit or no recorded commit hash.
-- **Default-branch implementation** — implementing a plan on the default branch instead of its `plan/<slug>` branch.
-- **PR without consent** — pushing a branch or opening a draft PR before the user explicitly agrees.
-- **Scope creep** — accepting unrelated work or opportunistic fixes into an approved phase.
-- **New-work absorption** — doing a later phase's work inside the current phase instead of adding a new phase and planning it separately.
-- **Speculative abstraction** — a helper, layer, option, or dependency built for a caller that does not exist.
-- **Copy-paste duplication** — a second copy of logic where the existing helper or a small extraction fits.
-- **Comment narration** — comments that repeat what the code says or record the change instead of explaining why.
-- **Test theater** — tautological tests that restate the implementation, repeat another test's assertion, or pass when the behavior breaks.
+The full list is in `references/failure-modes.md`. The most damaging are:
+
+- **Empty approval** — approving a plan that still contains template placeholders.
+- **Coverage by assertion** — marking a criterion met without command, test, or file evidence.
+- **Unauthorized start** — implementing a phase the user has not explicitly approved.
+- **Coordinator implementation** — writing product code instead of delegating an approved phase.
+- **Discovery loss** — omitting an affecting ledger row from `Prior discoveries applied`.
+- **Uncommitted closeout** — a done phase with no commit, implementer, or closeout history.
+- **Default-branch implementation** and **PR without consent**.
 
 ## Files
 
 - `references/master-template.md` — master plan structure.
+- `references/master-template-small.md` — compact master for `--size small`.
 - `references/phase-plan-template.md` — phase sub-plan and closeout structure.
+- `references/phase-plan-template-small.md` — compact phase plan for small plans.
 - `references/worker-prompt-template.md` — required prompt for the subagent that implements an approved phase.
 - `references/issue-intake.md` — reading GitHub/Linear/tracker issues, extraction checklist, gap questions, and sizing examples.
-- `scripts/progressive_plan.py` — `new`, `add-phase`, `approve`, `record-commit`, `discoveries`, `check`, `status`.
+- `references/example-plan.md` — a filled small one-phase plan.
+- `references/gates.md` — the shared approval, delegation, closeout, commit, and PR gates.
+- `references/code-standards.md` — code-quality rules and enforcement.
+- `references/closeout-report.md` — the user-facing closeout report shape.
+- `references/orchestration.md` — subagent delegation rules.
+- `references/failure-modes.md` — the full failure-mode checklist.
+- `scripts/progressive_plan.py` — `new`, `add-phase`, `write-plan`, `approve`, `reopen`, `record-commit`, `close`, `add-discovery`, `add-decision`, `discoveries`, `scope`, `report`, `check`, `status`.
+- `scripts/planlib.py` — shared parser, validation, status, and report helpers.
 - `../plan-resume/` — the new-session resume skill; use it before editing an existing plan.

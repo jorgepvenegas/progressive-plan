@@ -17,12 +17,11 @@ If the feedback only changes a step, file list, acceptance wording, or risk insi
 ## Order of edits
 
 1. Edit `master.md`.
-2. Bump `Master version` by 1.
-3. Add or update the discovery-ledger row, including `Affects`.
-4. Update the phase map and, when relevant, the closeout history.
-5. Revalidate every affected phase plan.
-6. Run `progressive_plan.py check`.
-7. Re-present the current phase for approval.
+2. Record the change with `add-discovery` or `add-decision`; both bump `Master version` and validate `Affects`.
+3. Update the phase map and, when relevant, the closeout history.
+4. Revalidate every affected phase plan.
+5. Run `progressive_plan.py check`.
+6. Re-present the current phase for approval.
 
 Doing the phase plans before the master leaves them validated against the wrong version.
 
@@ -42,17 +41,16 @@ For each phase whose plan is affected:
 
 If the feedback adds a separate outcome, add a phase instead of expanding the current one:
 
-- Add a phase-map row with a one-line outcome, dependencies, and status `planned`.
-- Bump `Master version` and update affected plans' validated version.
+- Add a phase-map row with `add-phase <plan-dir> "<name>" --depends <deps> --outcome "<outcome>" --outline`; it bumps `Master version` and leaves the plan unwritten.
 - Do not add the new outcome as steps in the current phase.
-- Write the new phase plan after the current phase closes, then stop at its approval gate.
+- Write the new phase plan with `write-plan` after the current phase closes, then stop at its approval gate.
 
 ## Status rules
 
 | Affected phase status | Action |
 |---|---|
 | `planned` or `draft` | Update the plan and keep it unapproved. |
-| `ready` | Reset approval, set `planned`, update the plan, then re-request approval. |
+| `ready` | Run `reopen <plan-dir> P<n>`, update the plan, then re-request approval. |
 | `in_progress` | Stop implementation, record the change, update the plan, and report the interruption to the user before continuing. |
 | `done` | Do not rewrite its closeout evidence. Prefer a new phase or an added step. If its result is invalid, set the master row to `needs_replan`, keep the closeout, and write a new plan version for the corrective work. |
 | `blocked` | Update the blocker or plan only after the blocking condition is resolved or the user changes direction. |
@@ -66,6 +64,7 @@ Every master-level change produces a ledger row unless an existing row already c
 ```
 
 Types: `note`, `phase-amend`, `next-phase-amend`, `master-amend`, `new-phase`, `scope-change`, `plan-defect`.
+Statuses: `open`, `applied`, `superseded`, `wontfix`.
 
 For a user-requested scope change, use `scope-change` and confirm the user-visible contract before editing. For a defect in an earlier plan, use `plan-defect` and name the missed fact.
 
@@ -84,5 +83,5 @@ Before re-presenting:
 - `Master version` is higher than before.
 - Every affected phase names the new master version.
 - Every ledger row has `Affects`, an action, and a status.
-- `progressive_plan.py check` passes.
+- `progressive_plan.py check --strict` passes.
 - The current phase is still `draft` and unapproved until the user says otherwise.
