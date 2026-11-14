@@ -388,7 +388,9 @@ The full list is in `references/failure-modes.md`. The most damaging are:
 ## Files
 
 - `references/master-template.md` — master plan structure.
+- `references/master-template-small.md` — compact master for `--size small`.
 - `references/phase-plan-template.md` — phase sub-plan and closeout structure.
+- `references/phase-plan-template-small.md` — compact phase plan for small plans.
 - `references/worker-prompt-template.md` — required prompt for the subagent that implements an approved phase.
 - `references/issue-intake.md` — reading GitHub/Linear/tracker issues, extraction checklist, gap questions, and sizing examples.
 - `references/example-plan.md` — a filled small one-phase plan.
