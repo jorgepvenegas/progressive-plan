@@ -212,6 +212,19 @@ class StructureTests(PlanTestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("dependency cycle", result.stdout + result.stderr)
 
+    def test_unknown_prior_discovery_is_error(self) -> None:
+        plan_dir = make_valid_plan(self.tmp, "ready")
+        plan_file = plan_dir / "phases" / "01-build" / "plan.md"
+        plan_text = plan_file.read_text(encoding="utf-8").replace(
+            "| None | none | No ledger rows affect this phase. |",
+            "| L9 | missing | Applied. |",
+            1,
+        )
+        plan_file.write_text(plan_text, encoding="utf-8")
+        result = run_cli(self.tmp, "check", str(plan_dir))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unknown ledger row L9", result.stdout + result.stderr)
+
     def test_invalid_ledger_row_is_error(self) -> None:
         plan_dir = self.new_plan()
         master = self.master(plan_dir)

@@ -907,6 +907,15 @@ def validate_plan(
                     )
 
             mentioned = mentioned_ledger_ids(plan)
+            known_ledger = {
+                entry["id"] for entry in entries if not entry.get("malformed")
+            }
+            for mentioned_id in sorted(mentioned):
+                if mentioned_id not in known_ledger:
+                    errors.append(
+                        f"{plan_file}: 'Prior discoveries applied' names unknown "
+                        f"ledger row {mentioned_id}"
+                    )
             for entry in affecting_ledger(entries, phase_id):
                 if entry["id"] not in mentioned:
                     errors.append(
