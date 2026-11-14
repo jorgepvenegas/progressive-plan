@@ -75,7 +75,7 @@ The required sections and their order are in `../progressive-plan/references/mas
 
 For a missing `Code standards`, add the table from the master template and record the project's real format, lint, type-check, and test commands; write `none` only for a check the project does not have.
 
-Do not present a phase for approval or spawn a worker while `check` fails.
+If an older phase plan is missing a required section such as `Risks and unknowns`, add the section from `../progressive-plan/references/phase-plan-template.md` before continuing. Keep the existing content and status. Do not present a phase for approval or spawn a worker while `check` fails.
 
 ## 3. Choose the next action from the state
 

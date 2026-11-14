@@ -55,7 +55,7 @@ If the feedback points out a defect in the current plan, record it as a plan def
 
 Read `master.md` and the phase plan before editing. Apply targeted edits; do not re-plan from scratch when one section is enough.
 
-If `check` fails because the master predates a required section such as `Goal flow`, add it from `../progressive-plan/references/master-template.md` first, bump the master version, and revalidate affected phases. This is a schema repair, not a refinement of the current phase.
+If `check` fails because the master predates a required section such as `Goal flow`, add it from `../progressive-plan/references/master-template.md` first, record it with `add-discovery`, and revalidate affected phases. If an older phase plan is missing a required section such as `Risks and unknowns`, add it from `../progressive-plan/references/phase-plan-template.md`. These are schema repairs, not refinements of the current phase.
 
 ### Phase-local changes
 
