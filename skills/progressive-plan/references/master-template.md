@@ -5,10 +5,12 @@
 - Status: draft
 - Created: {{DATE}}
 - Source: <issue URL, ticket ID, or user request>
-- Size: small | medium | large
+- Size: {{SIZE}}
 - Owner: <coordinator agent or user>
-- Plan directory: `docs/plans/{{SLUG}}`
-- Branch: `plan/{{SLUG}}`
+- Plan directory: `{{PLAN_DIR}}`
+- Branch: `{{BRANCH}}`
+
+`Status` is one of `draft`, `active`, `complete`, or `blocked`. `approve` sets `active`; `close` sets `complete` when every phase is done.
 
 ## 1. Objective
 
@@ -67,7 +69,9 @@ Write `none` only for a check the project does not have.
 |---|---|---|---|---|---|
 
 Status: `planned`, `ready`, `in_progress`, `done`, `blocked`, `needs_replan`, `superseded`.
-`ready` means the user has explicitly approved that phase plan. A written plan is not `ready` until it passes the approval gate. Later phases may stay as outlines; write a phase sub-plan just before that phase starts, then stop and ask for approval.
+`ready` means the user has explicitly approved that phase plan. A written plan is not `ready` until it passes the approval gate. Later phases may stay as outlines; add them with `add-phase --outline`, then write the plan with `write-plan` just before the phase starts and stop for approval.
+
+A phase plan with `Parallel safe: yes` may be approved before its dependencies are done. Use it only for phases the master explicitly marks independent.
 
 ## 8. Cross-phase decisions
 
@@ -85,6 +89,7 @@ Append-only. One row per discovery that changed or could change a plan. Use `not
 |---|---|---|---|---|---|---|---|
 
 Types: `note`, `phase-amend`, `next-phase-amend`, `master-amend`, `new-phase`, `scope-change`, `plan-defect`.
+Statuses: `open`, `applied`, `superseded`, `wontfix`. Only `superseded` rows are skipped by discovery propagation.
 
 Every row must have an `Affects` value: `all`, one phase ID, or a comma-separated list/range such as `P3–P5`. `check` fails a `ready`, `in_progress`, or `done` phase that does not list every affecting row in its `Prior discoveries applied` table.
 
