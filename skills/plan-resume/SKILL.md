@@ -1,13 +1,13 @@
 ---
 name: plan-resume
-description: Resume an in-progress progressive-plan master plan in a new coding session. Use when starting fresh against an existing docs/plans master and phase plans, when the user says resume or continue the plan, or when a session was interrupted and the next agent must reconstruct state without re-planning.
+description: Resume an in-progress progressive-plan master in a new session. Use when continuing an existing docs/plans plan or reconstructing state after an interruption without re-planning.
 ---
 
 # Plan Resume
 
 Use this skill at the start of a new session against an existing `progressive-plan` plan. The goal is to reconstruct the exact state, verify it against the repository and git history, and continue from the next legal action. Do not re-plan from scratch and do not redo completed phases.
 
-The execution rules remain in `progressive-plan`: approval gate, subagent implementation, commit gate, and discovery propagation. This skill only gets the new session to the correct entry point.
+The execution rules remain in `progressive-plan` and its `references/gates.md`: approval gate, subagent implementation, closeout evidence, commit gate, and discovery propagation. This skill only gets the new session to the correct entry point.
 
 ## Quick start
 
@@ -50,13 +50,14 @@ Reconcile these pairs:
 |---|---|
 | Current phase `in_progress` | Is there a worker, changed files, a phase closeout, and a commit? |
 | Phase `ready` | Is `Approved by` set, and is the plan validated against the current master version? |
-| Phase `done` | Does the recorded commit exist? Is it an ancestor of HEAD? Is the closeout verdict valid? |
+| Phase `done` | Does the recorded commit exist and is it an ancestor of HEAD? Is the verdict `addressed`? Does every A and claimed D have a `met` closeout row with evidence? Are all code-standards boxes checked? |
 | Working tree clean | Does `git status` agree? If dirty, identify which phase the changes belong to. |
 | Tests pass | Run the phase verification before trusting old evidence. |
 | Standards check clean | Run the master's standards commands and read the phase plan's `Code standards check`. |
 | Discoveries applied | Does the phase plan list every ledger row whose `Affects` includes it? |
 | Commit recorded | Does `Commit:` name a real commit, and does `Implemented by` name the worker or a recorded exception? |
-| Plan branch | Does `git branch --show-current` match the master `Branch:` field? If the master has no `Branch:` field, report the current branch; do not create a branch mid-plan without asking. |
+| Resume brief | Does `Current phase` match the actual phase map? `resume_status.py` warns when it does not. |
+| Plan branch | Does `git branch --show-current` match the master `Branch:` field? `resume_status.py` warns on a mismatch. If the master has no `Branch:` field, report the current branch; do not create a branch mid-plan without asking. |
 
 Never discard uncommitted work to make the state look clean. If the dirty files belong to the current phase, treat them as in-progress work. If they belong to a later phase, stop and report the out-of-order change.
 
@@ -68,10 +69,9 @@ The required sections and their order are in `../progressive-plan/references/mas
 
 1. Add the section after `Objective`, with a fenced `mermaid` diagram of the plan's user-visible outcome.
 2. Fill the diagram from the objective and definition of done. Keep it to the main path; no phase IDs or internal component names.
-3. Bump `Master version` by 1.
+3. Record the schema repair with `add-discovery <plan-dir> <phase> "Added the required section" --affects all --type master-amend --action "Repaired the master schema"`. It bumps `Master version`.
 4. Set `Validated against master version` to the new version in every `ready` or `in_progress` phase plan.
-5. Add a `master-amend` discovery row with `Affects: all` and the reason.
-6. Re-run `check`.
+5. Re-run `check`.
 
 For a missing `Code standards`, add the table from the master template and record the project's real format, lint, type-check, and test commands; write `none` only for a check the project does not have.
 
@@ -81,11 +81,11 @@ Do not present a phase for approval or spawn a worker while `check` fails.
 
 | Current phase state | Next action |
 |---|---|
-| No phase plan yet | Write the next phase plan from the master; keep it `draft`/`planned`. |
-| Plan written, not approved | Present the plan to the user and ask for approval. If the user requests changes, use the `refine-phase` skill; do not implement. |
+| No phase plan yet | Write the plan with `write-plan <plan-dir> P<n>`; keep it `draft`/`planned`. |
+| Plan written, not approved | Present the plan to the user and ask for approval. If the user requests changes, use `refine-phase`; if it was already ready, run `reopen` first. |
 | Approved and `ready` | Set `in_progress`, spawn the implementation subagent, and wait. |
-| `in_progress` | Inspect the worker's files, verification, closeout, and commit; do not reimplement. Finish the coordinator review. |
-| `partial` closeout | Continue the remaining steps with a subagent, or close the session with a partial verdict and a handoff. |
+| `in_progress` | Inspect the worker's files, verification, closeout, and commit; run `scope`; do not reimplement. Finish the coordinator review. |
+| `partial` closeout | Continue the remaining steps with a subagent, or leave the phase `in_progress` with a handoff. |
 | `done` | Write the next phase plan and stop at the approval gate. |
 | `blocked` | Report the blocker, owner, and unblocking condition. Do not start a different phase without approval. |
 | `needs_replan` | Rewrite the phase plan against the current master, then ask for approval. |
@@ -94,16 +94,14 @@ If the current phase is already implemented but not committed, finish the closeo
 
 ## 4. Resume the progressive-plan loop
 
-Once the state is reconciled:
+Once the state is reconciled, follow `../progressive-plan/references/gates.md`. The resume-specific rules are:
 
-- **Never implement an unapproved phase.** Ask: "The P<n> plan is ready at `<path>. Approve implementation?"
-- **Never write product code in the coordinator.** Spawn a subagent with `../progressive-plan/references/worker-prompt-template.md`, including the approval record.
-- **Never mark a phase done without evidence.** Run the verification commands; do not trust a stale closeout.
-- **Never skip the commit gate.** A `done` phase needs a real commit hash recorded in the phase plan and master.
-- **Never implement on the default branch.** Work on `plan/<slug>` when the master records it. If the plan predates the branch field and work is already in progress, report the current branch instead of rebranching silently.
-- **Never drop discoveries.** Run `progressive_plan.py discoveries <plan-dir> <phase>` and compare it with the phase plan's `Prior discoveries applied` table.
-- **Keep the phase focused.** If a closeout reports a `new-phase` discovery, verify the master phase map has that phase as `planned` and that the current phase did not implement it. Do not absorb new work into the current phase.
-- **Do not start the next phase because it looks easy.** Close the current phase and stop at the next approval gate.
+- Do not implement an unapproved phase. Ask: "The P<n> plan is ready at `<path>. Approve implementation?"
+- Use `reopen` when a ready or done phase needs plan changes; do not edit approval fields by hand.
+- Use `record-commit` and `close`; do not mark a phase done by editing the status fields.
+- Run `scope <plan-dir> <phase>` before accepting a worker's commit.
+- If a closeout reports a `new-phase` discovery, verify the master phase map has that phase as `planned` and that the current phase did not implement it.
+- Do not start the next phase because it looks easy. Close the current phase and stop at the next approval gate.
 
 ## 5. Report the resume state
 
@@ -129,11 +127,8 @@ Lead with whether the phase is approved, in progress, or done. Do not bury a pen
 - **Re-planning from scratch** — ignoring an existing master and phase plans.
 - **Stale-state trust** — believing a closeout without running its verification.
 - **Dirty-tree amnesia** — resetting or overwriting uncommitted work from the previous session.
-- **Skipping the approval gate** — continuing into implementation because the plan already exists.
-- **Skipping the subagent mandate** — the coordinator implementing the phase itself.
-- **Skipping the commit gate** — marking a phase done without a real recorded commit.
-- **Discovery loss** — starting the next phase without checking the master ledger and `Prior discoveries applied`.
-- **Default-branch implementation** — resuming work on the default branch when the plan records a `plan/<slug>` branch.
+- **Stale resume brief** — following a `Current phase` that disagrees with the phase map.
+- **Skipping the approval or commit gate** — see `../progressive-plan/references/failure-modes.md`.
 - **Scope absorption** — letting a worker's out-of-scope discovery become part of the current phase instead of a new phase.
 
 ## Files
