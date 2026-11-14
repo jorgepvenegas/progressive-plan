@@ -77,6 +77,8 @@ For a missing `Code standards`, add the table from the master template and recor
 
 If an older phase plan is missing a required section such as `Risks and unknowns`, add the section from `../progressive-plan/references/phase-plan-template.md` before continuing. Keep the existing content and status. Do not present a phase for approval or spawn a worker while `check` fails.
 
+Legacy done phases may lack `Implemented by`, `Implemented at`, checked code-standards items, or a `met` closeout row. Do not invent evidence. Record a `plan-defect`, keep the original closeout and commit visible, and ask the user whether to accept the gap, add a corrective phase, or mark the plan `needs_replan`.
+
 ## 3. Choose the next action from the state
 
 | Current phase state | Next action |
