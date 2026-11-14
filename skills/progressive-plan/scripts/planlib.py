@@ -839,6 +839,15 @@ def validate_plan(
                     f"{plan_file}: Master plan link does not exist ({target})"
                 )
 
+        plan_number = field(plan, "Plan version")
+        if plan_number is None:
+            errors.append(f"{plan_file}: missing 'Plan version'")
+        else:
+            try:
+                int(plan_number)
+            except ValueError:
+                errors.append(f"{plan_file}: invalid Plan version '{plan_number}'")
+
         plan_version = field(plan, "Validated against master version")
         if plan_version is None:
             errors.append(f"{plan_file}: missing 'Validated against master version'")
