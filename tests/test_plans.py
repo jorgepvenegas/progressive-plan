@@ -93,6 +93,17 @@ class ScaffoldTests(PlanTestCase):
         self.assertTrue((plan_dir / "phases" / "01-first-phase" / "plan.md").exists())
         self.assert_ok(run_cli(self.tmp, "check", str(plan_dir)))
 
+    def test_small_plan_uses_compact_templates(self) -> None:
+        plan_dir = self.new_plan()
+        self.assertIn('A["User request"]', self.master(plan_dir))
+        self.assert_ok(
+            run_cli(self.tmp, "add-phase", str(plan_dir), "First phase")
+        )
+        plan_text = (plan_dir / "phases" / "01-first-phase" / "plan.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Keep this phase to one outcome.", plan_text)
+
 
 class ApprovalTests(PlanTestCase):
     def test_approve_refuses_empty_template(self) -> None:
@@ -416,6 +427,30 @@ class ResumeAndReportTests(PlanTestCase):
             self.assertTrue(
                 planlib.has_heading(phase_template, heading),
                 f"phase template missing {heading}",
+            )
+        small_master_template = (
+            ROOT
+            / "skills"
+            / "progressive-plan"
+            / "references"
+            / "master-template-small.md"
+        ).read_text(encoding="utf-8")
+        small_phase_template = (
+            ROOT
+            / "skills"
+            / "progressive-plan"
+            / "references"
+            / "phase-plan-template-small.md"
+        ).read_text(encoding="utf-8")
+        for heading in planlib.MASTER_HEADINGS:
+            self.assertTrue(
+                planlib.has_heading(small_master_template, heading),
+                f"small master template missing {heading}",
+            )
+        for heading in planlib.PHASE_HEADINGS:
+            self.assertTrue(
+                planlib.has_heading(small_phase_template, heading),
+                f"small phase template missing {heading}",
             )
         self.assertIn("Risks and unknowns", planlib.PHASE_HEADINGS)
 

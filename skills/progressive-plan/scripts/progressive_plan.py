@@ -189,8 +189,11 @@ def cmd_new(args: argparse.Namespace) -> None:
     if plan_dir.exists():
         fail(f"{plan_dir} already exists")
     (plan_dir / "phases").mkdir(parents=True)
+    template_name = (
+        "master-template-small.md" if args.size == "small" else "master-template.md"
+    )
     master = render(
-        "master-template.md",
+        template_name,
         TITLE=args.title,
         SLUG=slug,
         DATE=date.today().isoformat(),
@@ -227,6 +230,11 @@ def cmd_add_phase(args: argparse.Namespace) -> None:
     if not master_file.exists():
         fail(f"{master_file} does not exist")
     master = read_text(master_file)
+    phase_template = (
+        "phase-plan-template-small.md"
+        if field(master, "Size") == "small"
+        else "phase-plan-template.md"
+    )
     rows = phase_rows(master)
     number = max((int(row["id"][1:]) for row in rows), default=0) + 1
     phase_id = f"P{number}"
@@ -246,7 +254,7 @@ def cmd_add_phase(args: argparse.Namespace) -> None:
         if phase_dir.exists() and any(phase_dir.iterdir()):
             fail(f"{phase_dir} already exists")
         plan_text = render(
-            "phase-plan-template.md",
+            phase_template,
             PHASE_ID=phase_id,
             PHASE_NAME=name,
             SLUG=plan_dir.name,
@@ -299,8 +307,13 @@ def cmd_write_plan(args: argparse.Namespace) -> None:
     if phase_dir.exists() and any(phase_dir.iterdir()):
         fail(f"{phase_dir} already exists")
     phase_dir.mkdir(parents=True, exist_ok=True)
+    phase_template = (
+        "phase-plan-template-small.md"
+        if field(master, "Size") == "small"
+        else "phase-plan-template.md"
+    )
     plan_text = render(
-        "phase-plan-template.md",
+        phase_template,
         PHASE_ID=row["id"],
         PHASE_NAME=name,
         SLUG=plan_dir.name,
