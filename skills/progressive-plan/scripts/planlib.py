@@ -1311,7 +1311,7 @@ def build_status(plan_dir: Path, phase_override: str | None = None) -> dict[str,
     elif all(row["status"] == "done" for row in rows):
         next_action = (
             "All phases are done. Run the final definition-of-done sweep, "
-            "then offer a draft PR."
+            "then offer a draft PR and ask whether to keep or remove the plan files."
         )
     elif current_row is not None:
         if current_row["status"] == "in_progress":
@@ -1608,6 +1608,10 @@ def render_report(plan_dir: Path) -> str:
         f"- Plan directory: `{plan_dir}`"
     )
     lines.append("")
+    lines.append("## Issue")
+    source = field(master, "Source")
+    lines.append(f"Source: {source or '_missing_'}")
+    lines.append("")
     lines.append("## Objective")
     lines.append(section(master, "Objective").strip() or "_missing_")
     dod_items = definition_items(master)
@@ -1640,6 +1644,36 @@ def render_report(plan_dir: Path) -> str:
                         f"| {item['id']} | {row['verdict'] or 'missing'} | "
                         f"{row['evidence'] or '-'} |"
                     )
+    lines.append("")
+    lines.append("## What was done")
+    if rows:
+        for row in rows:
+            plan_file = phase_plan_path(plan_dir, row)
+            commit = ""
+            if plan_file.exists():
+                value = field(read_text(plan_file), "Commit")
+                if value and not is_pending(value):
+                    commit = f" — commit `{value}`"
+            lines.append(
+                f"- {row['id']} — {row['name']}: {row['outcome']} "
+                f"({row['status']}){commit}"
+            )
+    else:
+        lines.append("_none_")
+    lines.append("")
+    lines.append("## Decisions")
+    decisions = decision_rows(master)
+    if decisions:
+        lines.append("| ID | Date | Decision | Reason | Affects |")
+        lines.append("|---|---|---|---|---|")
+        for decision in decisions:
+            lines.append(
+                f"| {decision['id']} | {decision['date']} | "
+                f"{decision['decision']} | {decision['reason']} | "
+                f"{decision['affects']} |"
+            )
+    else:
+        lines.append("_none_")
     lines.append("")
     lines.append("## Phase map")
     lines.append("| ID | Phase | Outcome | Depends on | Status | Plan |")

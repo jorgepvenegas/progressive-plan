@@ -58,6 +58,7 @@ Reconcile these pairs:
 | Commit recorded | Does `Commit:` name a real commit, and does `Implemented by` name the worker or a recorded exception? |
 | Resume brief | Does `Current phase` match the actual phase map? `resume_status.py` warns when it does not. |
 | Plan branch | Does `git branch --show-current` match the master `Branch:` field? `resume_status.py` warns on a mismatch. If the master has no `Branch:` field, report the current branch; do not create a branch mid-plan without asking. |
+| Draft PR | If the resume brief records `- PR: <url>`, run `gh pr view <url>` (or the harness equivalent) and confirm the PR is open and its head is the plan branch. Run `git status -sb`; push any commits that exist only locally. If it records `PR: declined (<date>)`, do not open one without asking. If it records `PR: none`, ask at the next plan review. |
 
 Never discard uncommitted work to make the state look clean. If the dirty files belong to the current phase, treat them as in-progress work. If they belong to a later phase, stop and report the out-of-order change.
 
@@ -102,6 +103,9 @@ Once the state is reconciled, follow `../progressive-plan/references/gates.md`. 
 - Use `reopen` when a ready or done phase needs plan changes; do not edit approval fields by hand.
 - Use `record-commit` and `close`; do not mark a phase done by editing the status fields.
 - Run `scope <plan-dir> <phase>` before accepting a worker's commit.
+- If a draft PR is open, push every commit as it is created, including plan, approval, and closeout metadata commits.
+- Before presenting a plan for approval, commit it with a `plan:` subject and push it when a draft PR is open. If no draft PR exists and the master records no decline, offer one first (see `../progressive-plan/references/gates.md`).
+- When the master is complete, follow the completed-plan file gate: ask whether to keep or remove the plan files, archive them under `<plans-root>/archive/<slug>/` when kept, push the disposition commit, and update the PR title and body for the implemented outcome. The title uses a conventional-commit prefix; the body covers the issue, what was done, the decisions, and verification.
 - If a closeout reports a `new-phase` discovery, verify the master phase map has that phase as `planned` and that the current phase did not implement it.
 - Do not start the next phase because it looks easy. Close the current phase and stop at the next approval gate.
 
@@ -116,6 +120,7 @@ Current phase: P<n> — <name> (<status>)
 Approval: approved by <user> on <date> | pending
 Commit: <hash> | none
 Branch: plan/<slug> | <current branch> | none
+PR: <draft URL> | declined (<date>) | none
 Working tree: clean | <n> files (list)
 Verification from this session: <command> — <result>
 Next legal action: <one action>
@@ -132,6 +137,8 @@ Lead with whether the phase is approved, in progress, or done. Do not bury a pen
 - **Stale resume brief** — following a `Current phase` that disagrees with the phase map.
 - **Skipping the approval or commit gate** — see `../progressive-plan/references/failure-modes.md`.
 - **Scope absorption** — letting a worker's out-of-scope discovery become part of the current phase instead of a new phase.
+- **Unpushed review PR** — resuming while plan or closeout commits stay local and the draft PR shows stale content.
+- **Plan leftovers** — completing a master without deciding whether to archive or remove its plan files.
 
 ## Files
 

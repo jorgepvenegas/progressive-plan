@@ -30,6 +30,10 @@
 - **Stale resume brief** — a brief that names a different current phase than the phase map.
 - **Branch mismatch** — implementing on the default branch while the master records `plan/<slug>`.
 - **PR without consent** — pushing a branch or opening a draft PR before the user explicitly agrees.
+- **Stale review plan** — asking for approval before committing the plan and pushing it to the open draft PR, so the reviewer sees an older version.
+- **Unpushed review PR** — leaving plan, phase, or closeout commits local while the draft PR is open.
+- **Stale PR description** — leaving the plan-review title and body after the whole plan is implemented. Update the title to a conventional-commit title and the body with the issue, what was done, the decisions, and verification.
+- **Plan leftovers** — a completed master stays at the active plan path, so the next plan cannot use the slug. Archive it or remove it from the PR.
 
 ## Code quality
 

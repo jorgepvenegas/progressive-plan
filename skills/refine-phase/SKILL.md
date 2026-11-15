@@ -108,6 +108,8 @@ python3 <progressive-plan-dir>/scripts/progressive_plan.py status docs/plans/<sl
 
 `check` now validates content, not just headings: no template placeholders, at least one step and acceptance criterion, traceability for every criterion, and every affecting discovery. Fix every error before re-presenting.
 
+Commit the refined plan with a `plan: P<n> <name>` subject. If a draft PR is open, push it before presenting. If no draft PR exists and the master resume brief records no `PR: declined`, ask whether to open one so the user can read the refined plan on GitHub.
+
 Present a delta, not the whole plan again:
 
 ```text
@@ -117,6 +119,7 @@ Unchanged: <what the user might worry about but did not change>
 Acceptance now: <the current A1..An, one line each>
 Top risks: <one or two>
 Path: <absolute phase plan path>
+PR: <draft PR URL | none>
 Approve implementation of phase P<n>?
 ```
 
@@ -132,6 +135,7 @@ Only after the user explicitly approves:
    python3 <progressive-plan-dir>/scripts/progressive_plan.py approve docs/plans/<slug> P<n> --by "<user>"
    ```
 
+   Commit the approval metadata with `plan: P<n> approval` and push it when a draft PR is open.
 2. Verify the plan branch. `git branch --show-current` must match the master `Branch:` field (`plan/<slug>`). If the master has no `Branch:` field and the plan has no implementation commits, create or switch to `plan/<slug>` now. If work is already in progress, report the current branch and ask before rebranching.
 3. Set `Status: in_progress` in the phase plan and the master row to `in_progress`.
 4. Run `check` again.
@@ -139,9 +143,10 @@ Only after the user explicitly approves:
    - absolute paths to `master.md` and the phase plan,
    - the phase ID, plan branch, and scope fence,
    - the approval record (`Approved by`, `Approved at`),
-   - the instruction to implement, verify, write the phase closeout, commit on the plan branch, and report the hash.
+   - the draft PR URL or `none`,
+   - the instruction to implement, verify, write the phase closeout, commit on the plan branch, push the phase commit when a draft PR is open, and report the hash.
 6. Keep the handle. Do not implement the phase in the coordinator.
-7. Report the handoff, then follow the normal `progressive-plan` closeout loop: review the worker's files, tests, closeout, and commit; run `scope`; record the commit with `record-commit --by`; close the phase with `close`. When the final phase is done and all D items are met, run `report` and offer a draft PR.
+7. Report the handoff, then follow the normal `progressive-plan` closeout loop: review the worker's files, tests, closeout, and commit; run `scope`; record the commit with `record-commit --by`; close the phase with `close`; push every commit when a draft PR is open. When the final phase is done and all D items are met, run `report`, offer a draft PR if none exists, ask whether to keep or remove the plan files (archive them when kept), and update the PR title and body now that the plan is implemented. Use a conventional-commit title and cover the issue, what was done, the decisions, and verification.
 
 If the user pauses or rejects without actionable feedback, keep the phase `draft`, record the round, and ask one focused question. If the user abandons the phase, set it `blocked` and name the reason.
 
@@ -155,6 +160,8 @@ If the user pauses or rejects without actionable feedback, keep the phase `draft
 - **No full rewrite for a small change.** Keep the diff reviewable.
 - **No version inflation.** Bump versions for semantic changes, not typos.
 - **No weakened quality gates.** Do not drop standards checks, tests, or acceptance criteria to make a plan approvable.
+- **No stale review copy.** Commit and push the refined plan before presenting it, or the draft PR shows the previous version.
+- **No unpushed draft PR.** Push every commit while the draft PR is open.
 
 The shared approval, delegation, closeout, commit, and PR gates are in `../progressive-plan/references/gates.md`.
 

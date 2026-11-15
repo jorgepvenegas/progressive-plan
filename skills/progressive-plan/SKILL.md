@@ -17,6 +17,8 @@ docs/plans/<slug>/
 └── phases/
     ├── 01-<name>/plan.md
     └── 02-<name>/plan.md
+
+docs/plans/archive/<slug>/   # completed plans that are kept but no longer active
 ```
 
 - `master.md` is the contract and the map. The coordinator owns it.
@@ -44,7 +46,8 @@ Run these from the repository root. Each command is `python3 <skill-dir>/scripts
 | `add-decision <plan-dir> "<text>" --reason "<why>" --affects all` | Append a cross-phase decision and bump the master version. |
 | `discoveries <plan-dir> P2` | List ledger rows that affect the phase. |
 | `scope <plan-dir> P2 [--base REF]` | Compare changed files with the phase plan's `Files:` lists. |
-| `report <plan-dir>` | Print a plan or draft-PR report. |
+| `report <plan-dir>` | Print a plan or PR report with the issue, objective, what was done, decisions, verification, and validation. |
+| `archive <plan-dir> [--dest <root>]` | Move a completed plan to `<plans-root>/archive/<slug>` and update its recorded path. |
 | `check <plan-dir> [--strict]` | Validate structure, content, coverage, standards, and commits. |
 | `status <plan-dir> [--json]` | Print the phase table, check result, and next action. |
 
@@ -128,7 +131,7 @@ The repository owns its standards. Read `AGENTS.md`/`CLAUDE.md`, contributor doc
 
 ## Branch and PR gates
 
-Every plan gets its own branch. All plan and phase commits land on it. When the final phase is done and the definition of done is met, offer a draft PR. Never push or open a PR without explicit approval.
+Every plan gets its own branch. All plan and phase commits land on it. Never push or open a PR without explicit approval; approval to open the draft PR also authorizes later pushes to that same branch.
 
 ### Start of plan
 
@@ -146,9 +149,41 @@ Create the branch before writing `master.md`:
    ```
    If the branch already exists, switch to it. Do not recreate it.
 4. Record `- Branch: plan/<slug>` in the master header.
-5. If the repository is not a git repository, record that and continue without a branch. A missing remote does not block a local branch; it only blocks the draft PR at the end.
+5. If the repository is not a git repository, record that and continue without a branch. A missing remote does not block a local branch; it only blocks the draft PR.
 
 Do not create a plan branch in the middle of an existing plan. If a plan is already in progress and the current branch does not match the recorded branch, stop and report. `new` warns when the current branch is not `plan/<slug>`; `resume_status.py` warns about a mismatch with the recorded `Branch:` field.
+
+### Review draft PR
+
+A draft PR is how a reviewer who cannot read local markdown can still read the proposed plans. Offer it when the master or a phase plan is drafted, checked, and about to be presented for review.
+
+1. If a draft PR is already open for the branch, or the master resume brief records `- PR: declined (<date>)`, skip the offer. The user has already decided.
+2. Otherwise ask, before the approval question:
+   "The plan is ready for review at `<absolute path>`. Open a draft PR so you can read it on GitHub?"
+3. Only after explicit approval:
+   ```bash
+   git add -A
+   git commit -m "plan: <slug> master"
+   git push -u origin plan/<slug>
+   gh pr create --draft --base <default-branch> --head plan/<slug> \
+     --title "<plan title>" --body-file <temp-file>
+   ```
+   Use `plan: P<n> <name>` when the reviewed plan is a phase plan. Write the body from `progressive_plan.py report <plan-dir>`.
+4. Record `- PR: <url>` in the master resume brief, commit it with `plan: record draft PR`, and push.
+5. If the user declines, record `- PR: declined (<date>)` in the master resume brief, commit it with `plan: record PR decision`, and continue without pushing.
+6. If `gh` is missing, unauthenticated, or there is no remote, report the limitation and continue. Do not fail the plan.
+
+Before every approval request, commit the current plan with a `plan:` subject. If a draft PR is open, push it before asking. A plan that exists only in the working tree or only on the local branch is not reviewable on GitHub.
+
+### Push every commit
+
+While a draft PR is open for `plan/<slug>`, push every commit as it is created:
+
+```bash
+git push
+```
+
+This covers plan commits, phase commits, `record-commit` and `close` metadata commits, and the final plan-file disposition commit. The worker that creates the phase commit pushes it immediately. The coordinator pushes every commit it creates. Do not batch pushes until the end. If a push fails, report it and continue the closeout; do not rewrite history to fix it.
 
 ### End of plan
 
@@ -160,17 +195,39 @@ After the final phase is `done`, every definition-of-done item is met, any `reco
    git remote -v
    gh auth status
    ```
-2. Offer, do not act: "The plan is complete on `plan/<slug>`. Create a draft PR to `<default-branch>`?"
-3. Only after explicit approval, push and create the draft PR:
-   ```bash
-   git push -u origin plan/<slug>
-   gh pr create --draft --base <default-branch> --head plan/<slug> \
-     --title "<plan title>" --body-file <temp-file>
-   ```
-4. Write the PR body from `progressive_plan.py report <plan-dir>`, not from conversation. It includes the objective, definition-of-done checklist, phase table, closeout history, validation, and plan directory path.
-5. Record the PR URL in the master resume brief and report it.
+2. Generate the report with `progressive_plan.py report <plan-dir>`.
+3. If no draft PR exists, offer one: "The plan is complete on `plan/<slug>`. Create a draft PR to `<default-branch>`?" Only after explicit approval, push and create it with the report as the body.
+4. Ask about the plan files: "The master plan is complete. Keep the plan files in the repository, or remove them from the PR?"
+   - **Remove them from the PR:**
+     ```bash
+     git rm -r <plan-dir>
+     git commit -m "plan: remove completed plan files"
+     git push   # only when a draft PR is open
+     ```
+     If the plan directory is removed, the PR body must not point to it.
+   - **Keep them:** ask whether to leave them at `<plan-dir>` or archive them. Recommend archiving so a new master plan can use the same path:
+     ```bash
+     python3 <skill-dir>/scripts/progressive_plan.py archive <plan-dir>
+     git add -A
+     git commit -m "plan: archive <slug>"
+     git push   # only when a draft PR is open
+     ```
+     If the user wants to keep them in place, say that the slug stays occupied and a future master plan needs a new slug.
+5. Update the PR title and body now that the whole plan is implemented. Do this after the plan-file decision so the body shows the final paths.
+   - **Title:** conventional-commit format, chosen from the delivered outcome, not from the planning work: `feat:`, `fix:`, `docs:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, or `chore:`. Add a scope only when it helps: `feat(imports): add dry-run preview`.
+   - **Body:** start from `progressive_plan.py report <plan-dir>` and make sure it covers:
+     - **Issue** — the source and the problem: what was wrong or missing, and for whom.
+     - **What was done** — the delivered outcome and the phase summary.
+     - **Decisions** — the cross-phase decisions, chosen defaults, and tradeoffs.
+     - **Verification** — the commands run and their results.
+   - Apply it:
+     ```bash
+     gh pr edit <number> --title "feat: <implemented outcome>" --body-file <temp-file>
+     ```
+   - Leave the PR as a draft unless the user asks to mark it ready. If there is no PR, record the title and body in the final report instead.
+6. Record the PR URL and the plan-file decision in the final report.
 
-If `gh` is missing, unauthenticated, or there is no remote, report the limitation and leave the branch pushed or local as the user prefers. Do not fail the plan closeout.
+If the plans were removed, the PR contains only the product changes; keep the generated report in the PR body and the conversation. If `gh` is missing, unauthenticated, or there is no remote, report the limitation and leave the plan files where the user prefers.
 
 **Plans that predate this rule.** If the master has no `Branch:` field and work already landed on the default branch, do not push the default branch or open a PR from it. Report the state and ask whether to create a retrospective branch. Do not rewrite history.
 
@@ -206,6 +263,8 @@ Phase sizing:
 
 Check the master before moving on: can a new agent tell why the plan exists, when the whole task is done, which phase is next, and what each phase owes? If not, rewrite it.
 
+When `check` passes, commit the master with `plan: <slug> master`. If a draft PR is open, push it. Then offer the review draft PR (see Branch and PR gates) before starting the phase plan.
+
 ### 2. Write the phase sub-plan just in time
 
 Before starting phase `Pn`, write `phases/NN-<name>/plan.md`. If the master has only an outline, run `progressive_plan.py write-plan <plan-dir> Pn`. Do not start implementation from the master outline.
@@ -222,16 +281,19 @@ Leave the phase status `draft` and the master row `planned` while the plan is be
 
 A plan is ready for approval only when it has no template placeholders, at least one step, one phase acceptance criterion, and one traceability row for every criterion, plus a `Prior discoveries applied` row for every affecting ledger entry. `approve` enforces these checks and refuses an unfilled plan.
 
+When `check` passes, commit the plan with `plan: P<n> <name>` and push it if a draft PR is open. Then present it for review. If no draft PR exists and the master records no decline, offer one now (see Branch and PR gates) so the user can read the plan on GitHub.
+
 ### Approval gate (required before every phase)
 
 A phase may move to `ready` only after the user has seen its plan and explicitly approved it. This gate applies to every phase, including phases that look small or obvious.
 
 1. Finish the phase plan and run `check`. Keep the phase `draft` / master `planned`. If `check` reports a missing master section, repair the master from `references/master-template.md` before asking for approval. Do not mark the phase ready while `check` fails.
-2. Send the user a short review request: absolute plan path, phase outcome, acceptance criteria, and the top risks. Ask directly: "Approve implementation of phase Pn?"
-3. Wait. Do not edit implementation files, set `in_progress`, or spawn a worker for that phase. If the user asks for changes instead of approving, use the `refine-phase` skill (sibling directory); keep the phase `draft` and return to this gate after the refinement.
-4. On explicit approval, run `progressive_plan.py approve <plan-dir> <phase-id> --by "<user>"`. It validates the content and coverage, resets stale implementation fields, writes `Approved by` and `Approved at`, sets the phase and master row to `ready`, and sets the master status to `active`.
-5. Only then set the phase `in_progress` in the master and start step 1.
-6. Approval of one phase does not approve any later phase. Repeat the gate for every phase. If the user requests changes instead of approving, use `refine-phase`; if the phase was already ready, run `reopen` first.
+2. Commit the plan with `plan: P<n> <name>` and push it if a draft PR is open. If no draft PR exists and the master records no decline, ask the review-PR question first and record the answer.
+3. Send the user a short review request: absolute plan path, phase outcome, acceptance criteria, top risks, and the draft PR URL if one exists. Ask directly: "Approve implementation of phase Pn?"
+4. Wait. Do not edit implementation files, set `in_progress`, or spawn a worker for that phase. If the user asks for changes instead of approving, use the `refine-phase` skill (sibling directory); keep the phase `draft` and return to this gate after the refinement.
+5. On explicit approval, run `progressive_plan.py approve <plan-dir> <phase-id> --by "<user>"`. It validates the content and coverage, resets stale implementation fields, writes `Approved by` and `Approved at`, sets the phase and master row to `ready`, and sets the master status to `active`. Commit the approval metadata with `plan: P<n> approval` and push it if a draft PR is open.
+6. Only then set the phase `in_progress` in the master and start step 1.
+7. Approval of one phase does not approve any later phase. Repeat the gate for every phase. If the user requests changes instead of approving, use `refine-phase`; if the phase was already ready, run `reopen` first.
 
 Silence, a prior "keep going", approval of the master plan, or approval of an earlier phase is **not** approval of the current phase. Do not infer it. If the user asks to skip review, record that instruction in the phase plan and master before starting.
 
@@ -241,10 +303,11 @@ Silence, a prior "keep going", approval of the master plan, or approval of an ea
 
 1. Confirm the approval gate passed: the phase plan has `Approved by` and `Approved at`, and both the phase and master are `ready`.
 2. Set the phase `in_progress` in the master and in the phase plan before spawning.
-3. Spawn one subagent for the phase with the prompt from `references/worker-prompt-template.md`, filled with absolute paths, the phase ID, the scope fence, and the approval record. Use your harness's subagent mechanism: in prime-agent, `await rlm.spawn(prompt, name="p3-dashboard-ui")`; in Claude Code, the Task tool; in Pi, the `pi-subagents` tools. Keep the handle or task ID.
+3. Spawn one subagent for the phase with the prompt from `references/worker-prompt-template.md`, filled with absolute paths, the phase ID, the scope fence, the approval record, and the draft PR URL or `none`. Use your harness's subagent mechanism: in prime-agent, `await rlm.spawn(prompt, name="p3-dashboard-ui")`; in Claude Code, the Task tool; in Pi, the `pi-subagents` tools. Keep the handle or task ID.
 4. Wait for the worker's reply. Do not implement the phase while waiting. Do not start a second worker on the same phase or the same shared files.
 5. Review the worker's output yourself: read the changed files against the phase plan's file lists, run `progressive_plan.py scope <plan-dir> <phase>`, run the phase verification and the master's standards commands, inspect the commit, and read the closeout. Check the diff for duplicated logic, speculative abstraction, dead code, comment noise, and tautological tests. A silent worker is not a failed worker; verify before deciding.
-6. If the worker is blocked or wrong, send it a correction or spawn a replacement. Do not take over the implementation.
+6. Confirm the phase commit is pushed when a draft PR is open. A commit that exists only on the local branch is not visible to the reviewer.
+7. If the worker is blocked or wrong, send it a correction or spawn a replacement. Do not take over the implementation.
 
 ### Scope discipline and new work
 
@@ -346,7 +409,9 @@ A phase is not wrapped up until its work is committed. Do this after the closeou
    ```bash
    git add -A
    git commit -m "P<n>: <phase name>"
+   git push   # only when a draft PR is open
    ```
+   Push immediately when a draft PR is open. Do not wait until the plan is complete.
 3. Record the commit and implementer, then close the phase:
    ```bash
    python3 <skill-dir>/scripts/progressive_plan.py record-commit docs/plans/<slug> P<n> --by <worker>
@@ -354,16 +419,22 @@ A phase is not wrapped up until its work is committed. Do this after the closeou
    python3 <skill-dir>/scripts/progressive_plan.py check docs/plans/<slug>
    ```
    `record-commit` rejects a `HEAD` whose subject does not start with `P<n>:`. Use `--hash` when the phase commit is not `HEAD`. `close` sets the phase and master to `done`, writes the closeout history, and validates the result.
-4. `record-commit` and `close` edit the plan files after the phase commit. Commit that small metadata change separately (`P<n>: record closeout`) or include it in the next phase's commit. Never amend the phase commit, because amending changes the hash.
+4. `record-commit` and `close` edit the plan files after the phase commit. Commit that small metadata change separately:
+   ```bash
+   git add -A
+   git commit -m "P<n>: record closeout"
+   git push   # only when a draft PR is open
+   ```
+   Include it in the next phase's commit only when the plan is not complete and no draft PR is open. Never amend the phase commit, because amending changes the hash.
 5. Do not start the next phase until `close` succeeds and `check` passes.
 
-If the session ends `partial` or `blocked`, commit a WIP checkpoint with the same message plus `[WIP]`, record the hash, and state what remains. If the user explicitly forbids commits, record that exemption in the phase plan and master before proceeding; the gate is otherwise mandatory.
+If the session ends `partial` or `blocked`, commit a WIP checkpoint with the same message plus `[WIP]`, record the hash, and state what remains. Push the WIP commit when a draft PR is open. If the user explicitly forbids commits, record that exemption in the phase plan and master before proceeding; the gate is otherwise mandatory.
 
 ### 6. Hand off cleanly
 
 Update the resume brief in the master: current phase, last verdict, next action, open decisions. Write the next phase plan only when the previous phase is closed, then stop at the approval gate and ask the user. The next session starts with the `plan-resume` skill, which reads the master plan, the current phase plan, the git state, and the recorded commit; do not rely on conversation history that a later session will not have.
 
-Run `progressive_plan.py status <plan-dir>` to confirm the next legal action. When the final phase is `done` and every definition-of-done item is met, run `report <plan-dir>` and follow the End of plan gate in Branch and PR gates: ask whether to push and open a draft PR. Offer the generated report as the PR body.
+Run `progressive_plan.py status <plan-dir>` to confirm the next legal action. When the final phase is `done` and every definition-of-done item is met, run `report <plan-dir>` and follow the End of plan gate in Branch and PR gates: offer a draft PR if none exists, ask whether to keep or remove the plan files, archive them when kept, push every disposition commit, and update the PR title and body for the implemented outcome. The title uses a conventional-commit prefix; the body covers the issue, what was done, the decisions, and verification.
 
 ## User-facing closeout report
 
@@ -383,6 +454,9 @@ The full list is in `references/failure-modes.md`. The most damaging are:
 - **Coordinator implementation** — writing product code instead of delegating an approved phase.
 - **Discovery loss** — omitting an affecting ledger row from `Prior discoveries applied`.
 - **Uncommitted closeout** — a done phase with no commit, implementer, or closeout history.
+- **Unpushed review PR** — a draft PR is open while plan, phase, or closeout commits stay local.
+- **Stale PR description** — the PR still describes the plan review after the whole plan is implemented. Update the title and body, including the issue, what was done, and the decisions.
+- **Plan leftovers** — a completed master stays at the active plan path, so the next plan cannot use the slug. Archive it or remove it from the PR.
 - **Default-branch implementation** and **PR without consent**.
 
 ## Files
@@ -399,6 +473,6 @@ The full list is in `references/failure-modes.md`. The most damaging are:
 - `references/closeout-report.md` — the user-facing closeout report shape.
 - `references/orchestration.md` — subagent delegation rules.
 - `references/failure-modes.md` — the full failure-mode checklist.
-- `scripts/progressive_plan.py` — `new`, `add-phase`, `write-plan`, `approve`, `reopen`, `record-commit`, `close`, `add-discovery`, `add-decision`, `discoveries`, `scope`, `report`, `check`, `status`.
+- `scripts/progressive_plan.py` — `new`, `add-phase`, `write-plan`, `approve`, `reopen`, `record-commit`, `close`, `add-discovery`, `add-decision`, `discoveries`, `scope`, `report`, `archive`, `check`, `status`.
 - `scripts/planlib.py` — shared parser, validation, status, and report helpers.
 - `../plan-resume/` — the new-session resume skill; use it before editing an existing plan.

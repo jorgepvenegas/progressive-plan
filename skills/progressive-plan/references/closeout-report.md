@@ -11,6 +11,8 @@ Plan updates: master v3 (<rows/sections changed>); P3 plan v2 (<sections changed
 Standards: passed | <unmet rule and reason>
 Commit: <short hash>
 Branch: plan/<slug>
+PR: <draft URL | declined | none>
+Plan files: <in place | archived at <path> | removed from the PR>   # final closeout only
 Next action: <one concrete action>
 ```
 

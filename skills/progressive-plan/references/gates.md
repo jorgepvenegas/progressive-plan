@@ -52,11 +52,13 @@ Run the closeout at the end of every implementation session, and always before a
 ## Commit gate
 
 - Work on `plan/<slug>`, not the default branch.
+- Commit plan files with a `plan:` subject: `plan: <slug> master`, `plan: P<n> <name>`, `plan: P<n> approval`, or `plan: record draft PR`.
 - Commit the phase as `P<n>: <phase name>`.
 - Record the commit with `record-commit <plan-dir> P<n> --by <worker>`. The command rejects a `HEAD` whose subject does not start with `P<n>:`; pass `--hash` when the phase commit is not `HEAD`.
 - Run `check` after recording. A `done` phase without a real recorded commit fails.
 - Close the phase with `close <plan-dir> P<n> --by <worker>`. `close` sets the phase and master to `done`, writes the closeout history, and validates the result. It is the only transition that should mark a phase done.
-- Commit the metadata change separately; never amend the phase commit.
+- Commit the metadata change separately as `P<n>: record closeout`; never amend the phase commit.
+- If a draft PR is open for `plan/<slug>`, push every commit as it is created with `git push`. This includes plan commits, phase commits, approval and closeout metadata, and the final plan-file disposition commit. Do not batch pushes until the end. A commit that stays local is not reviewable on GitHub.
 
 ## Discovery propagation
 
@@ -70,5 +72,21 @@ Run the closeout at the end of every implementation session, and always before a
 
 - Every plan gets its own branch, recorded in the master.
 - Do not create a plan branch in the middle of an existing plan.
-- At the end, offer a draft PR; do not push or open it without explicit approval.
-- Write the PR body from `report <plan-dir>`, not from conversation. Include the objective, definition-of-done verdicts, phase table, verification commands, risks, and plan directory.
+- When the master or a phase plan is drafted, checked, and about to be presented for review, ask whether to open a draft PR so the user can read the plan on GitHub. Ask once per branch; skip the offer when the master resume brief records `- PR: declined (<date>)` or a draft PR already exists.
+- Do not push or open a PR without explicit approval. Approval to open the review draft PR authorizes later pushes to that same branch.
+- Before an approval request, commit the plan with a `plan:` subject. If a draft PR is open, push it first.
+- Record the PR URL in the master resume brief as `- PR: <url>`.
+- At the end, offer a draft PR if none exists; do not push or open it without explicit approval.
+- Write the initial PR body from `report <plan-dir>`, not from conversation. Include the objective, definition-of-done verdicts, phase table, verification commands, risks, and plan directory.
+- After the whole plan is implemented, update the PR title and body. The title uses a conventional-commit prefix (`feat:`, `fix:`, `docs:`, `refactor:`, `perf:`, `test:`, `build:`, `ci:`, or `chore:`) chosen from the delivered outcome. The body covers the issue, what was done, the decisions, and verification. Apply it with `gh pr edit <number> --title "<conventional title>" --body-file <temp-file>`.
+- Leave the PR as a draft unless the user asks to mark it ready.
+
+## Completed-plan file gate
+
+After the final phase is `done` and every definition-of-done item is met, ask whether to keep the plan files or remove them from the PR.
+
+- **Remove:** `git rm -r <plan-dir>`, commit `plan: remove completed plan files`, and push when a draft PR is open. The PR body must not point at the removed directory.
+- **Keep:** ask whether to leave the files at `<plan-dir>` or archive them under `<plans-root>/archive/<slug>/`. Recommend archive so a new master plan can use the same slug. Run `archive <plan-dir>`, commit `plan: archive <slug>`, and push when a draft PR is open.
+- If the user keeps the files in place, say that the slug stays occupied.
+- After the decision, update the PR title to a conventional-commit title and rewrite the body with the issue, what was done, the decisions, and verification.
+- Record the decision in the final report.
