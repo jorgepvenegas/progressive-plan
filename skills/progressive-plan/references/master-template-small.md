@@ -91,5 +91,5 @@ Statuses: `open`, `applied`, `superseded`, `wontfix`.
 - Last verdict: <addressed | partial | blocked | none>
 - Next action: <one concrete action>
 - Open decisions: <IDs or none>
-- PR: <none | draft PR URL>
+- PR: <none | declined (<date>) | draft PR URL>
 - Last updated: {{DATE}}

@@ -89,7 +89,7 @@ flowchart LR
 
 - Current phase: none
 - Last verdict: addressed
-- Next action: offer a draft PR
+- Next action: ask whether to keep or remove the plan files
 - Open decisions: none
 - PR: none
 - Last updated: 2026-11-14

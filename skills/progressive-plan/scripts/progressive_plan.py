@@ -14,6 +14,7 @@ Commands:
     discoveries <plan-dir> <phase>
     scope <plan-dir> <phase> [--base REF] [--strict] [--json]
     report <plan-dir> [--json]
+    archive <plan-dir> [--dest ARCHIVE_ROOT]
     check <plan-dir> [--strict] [--json]
     status <plan-dir> [--json]
 """
@@ -23,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
 from datetime import date
 from pathlib import Path
@@ -641,6 +643,41 @@ def cmd_close(args: argparse.Namespace) -> None:
     print(f"commit: {commit_hash}")
 
 
+def cmd_archive(args: argparse.Namespace) -> None:
+    plan_dir = Path(args.plan_dir)
+    master_file = plan_dir / "master.md"
+    if not master_file.exists():
+        fail(f"{master_file} does not exist")
+    rows = phase_rows(read_text(master_file))
+    if not rows or not all(row["status"] == "done" for row in rows):
+        fail(
+            f"{plan_dir} is not complete; "
+            "archive only a plan whose phases are all done"
+        )
+    archive_root = Path(args.dest) if args.dest else plan_dir.parent / "archive"
+    target = archive_root / plan_dir.name
+    resolved_plan = plan_dir.resolve()
+    resolved_target = target.resolve()
+    if resolved_target == resolved_plan or resolved_plan in resolved_target.parents:
+        fail(f"{target} must not be inside {plan_dir}")
+    if target.exists():
+        fail(f"{target} already exists")
+
+    archive_root.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(plan_dir), str(target))
+
+    repo = git_root(target)
+    try:
+        display = target.resolve().relative_to(repo.resolve()).as_posix()
+    except (AttributeError, ValueError):
+        display = target.as_posix()
+    master = read_text(target / "master.md")
+    master = set_field(master, "Plan directory", f"`{display}`")
+    write_text(target / "master.md", master)
+    print(f"archived {plan_dir} -> {target}")
+    print("next: commit the move and push if a draft PR is open")
+
+
 def cmd_check(args: argparse.Namespace) -> None:
     plan_dir = Path(args.plan_dir)
     result = validate_plan(plan_dir, strict=args.strict)
@@ -996,6 +1033,17 @@ def main() -> None:
     report.add_argument("plan_dir")
     report.add_argument("--json", action="store_true")
     report.set_defaults(func=cmd_report)
+
+    archive = sub.add_parser(
+        "archive", help="move a completed plan into the archive directory"
+    )
+    archive.add_argument("plan_dir")
+    archive.add_argument(
+        "--dest",
+        default=None,
+        help="archive root directory (default: <plans-root>/archive)",
+    )
+    archive.set_defaults(func=cmd_archive)
 
     check = sub.add_parser("check", help="validate master and phase plans")
     check.add_argument("plan_dir")

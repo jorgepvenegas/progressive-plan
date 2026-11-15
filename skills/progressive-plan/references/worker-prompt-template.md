@@ -15,6 +15,7 @@ Approval record:
 - Approved at: <YYYY-MM-DD>
 - Phase status: ready
 - Branch: plan/<slug>
+- Draft PR: <URL or none>
 Do not start if the phase plan is not approved or the approval fields are missing. Report the missing approval instead. Work and commit on the branch above; do not create, switch, or merge branches.
 
 Scope fence:
@@ -42,8 +43,9 @@ Work:
 5. Commit the phase:
    git add -A
    git commit -m "P<n>: <phase name>"
-6. Do not run record-commit, close, or edit master.md; report the short hash to the coordinator. The coordinator records the commit and closes the phase.
-7. Reply through your harness's subagent result channel (in prime-agent, `await agent_message.send(message, receiver_role='parent')`; otherwise return the report as your final message) containing:
+6. If `Draft PR` is not `none`, push the phase commit immediately: `git push`. Do not batch the push with later work.
+7. Do not run record-commit, close, or edit master.md; report the short hash to the coordinator. The coordinator records the commit and closes the phase.
+8. Reply through your harness's subagent result channel (in prime-agent, `await agent_message.send(message, receiver_role='parent')`; otherwise return the report as your final message) containing:
    - verdict: addressed / partial / blocked
    - phase criteria met and evidence
    - master DoD items advanced (partial is expected until the final phase)
@@ -55,4 +57,4 @@ Work:
 If a step is wrong or impossible, stop and report the exact gap with the evidence. Do not invent a new design. If the gap is a separate outcome or feature, report it as a `new-phase` discovery and continue the approved steps if they are still valid; do not implement it in this phase.
 ```
 
-The coordinator must verify the worker's files, tests, closeout, and commit before marking the phase done. A silent worker is not a failed worker; inspect the output first.
+The coordinator must verify the worker's files, tests, closeout, and commit before marking the phase done. When a draft PR is open, also confirm the phase commit reached the remote. A silent worker is not a failed worker; inspect the output first.

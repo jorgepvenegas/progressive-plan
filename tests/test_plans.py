@@ -355,6 +355,48 @@ class CommitAndCloseTests(PlanTestCase):
         self.assertIn("| P1 | Build | Add the behavior | none | in_progress |", self.master(plan_dir))
 
 
+class ArchiveTests(PlanTestCase):
+    def test_archive_moves_completed_plan(self) -> None:
+        init_git(self.tmp)
+        plan_dir = make_valid_plan(self.tmp, "done")
+        result = run_cli(self.tmp, "archive", str(plan_dir))
+        self.assert_ok(result)
+        target = self.tmp / "plans" / "archive" / "valid-plan"
+        self.assertFalse(plan_dir.exists())
+        self.assertTrue((target / "master.md").exists())
+        self.assertIn(
+            "Plan directory: `plans/archive/valid-plan`",
+            (target / "master.md").read_text(encoding="utf-8"),
+        )
+
+    def test_archive_uses_custom_destination(self) -> None:
+        init_git(self.tmp)
+        plan_dir = make_valid_plan(self.tmp, "done")
+        result = run_cli(
+            self.tmp, "archive", str(plan_dir), "--dest", "plans/done"
+        )
+        self.assert_ok(result)
+        self.assertTrue(
+            (self.tmp / "plans" / "done" / "valid-plan" / "master.md").exists()
+        )
+
+    def test_archive_rejects_incomplete_plan(self) -> None:
+        plan_dir = make_valid_plan(self.tmp, "ready")
+        result = run_cli(self.tmp, "archive", str(plan_dir))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not complete", result.stdout + result.stderr)
+        self.assertTrue(plan_dir.exists())
+
+    def test_archive_rejects_existing_destination(self) -> None:
+        plan_dir = make_valid_plan(self.tmp, "done")
+        target = self.tmp / "plans" / "archive" / "valid-plan"
+        target.mkdir(parents=True)
+        result = run_cli(self.tmp, "archive", str(plan_dir))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("already exists", result.stdout + result.stderr)
+        self.assertTrue(plan_dir.exists())
+
+
 class ResumeAndReportTests(PlanTestCase):
     def test_resume_reports_branch_mismatch(self) -> None:
         init_git(self.tmp)
@@ -412,7 +454,10 @@ class ResumeAndReportTests(PlanTestCase):
         result = run_cli(self.tmp, "report", "plans/valid-plan")
         self.assert_ok(result)
         self.assertIn("# Valid Plan", result.stdout)
+        self.assertIn("## Issue", result.stdout)
         self.assertIn("## Definition of done", result.stdout)
+        self.assertIn("## What was done", result.stdout)
+        self.assertIn("## Decisions", result.stdout)
         self.assertIn("| P1 |", result.stdout)
         self.assertIn("## Validation", result.stdout)
 

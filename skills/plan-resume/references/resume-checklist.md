@@ -26,6 +26,8 @@ Use this with `scripts/resume_status.py`. Tick every item before the first edit.
 - [ ] `git log --oneline -10` reviewed.
 - [ ] The current phase's recorded commit exists and is an ancestor of HEAD (or no commit is expected yet).
 - [ ] The current branch matches the master `Branch:` field.
+- [ ] The resume brief `PR:` field is checked. An open draft PR is confirmed, and commits that exist only locally are pushed.
+- [ ] If no draft PR exists and the brief records no decline, the next plan review offers one.
 - [ ] `scope <plan-dir> <phase>` reports no out-of-scope changed files, or each exception is reported.
 - [ ] The working tree is clean, or the dirty files are current-phase work.
 - [ ] No secrets, database files, build output, or `node_modules` are staged.
@@ -40,5 +42,7 @@ Use this with `scripts/resume_status.py`. Tick every item before the first edit.
 ## Handoff
 
 - [ ] The resume report states the next legal action.
-- [ ] If the phase is done, the next phase plan is written and the session stops at the approval gate.
+- [ ] If the phase is done, the next phase plan is written, committed with a `plan:` subject, pushed when a draft PR is open, and the session stops at the approval gate.
 - [ ] If the phase is blocked, the blocker, owner, and unblocking condition are written in the phase plan and master.
+- [ ] If the master is complete, the plan-file decision is recorded: files removed from the PR, archived under `<plans-root>/archive/<slug>/`, or kept in place.
+- [ ] If the master is complete, the PR title uses a conventional-commit prefix and the body covers the issue, what was done, the decisions, and verification.
