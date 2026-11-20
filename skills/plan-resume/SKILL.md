@@ -42,7 +42,7 @@ Do not rely on the previous session's conversation summary when the files disagr
 
 ## 2. Reconcile the state
 
-`resume_status.py` prints the master version, phase table, current phase, approval, implementation mode, commit record, closeout verdict, acceptance progress, affected discoveries, git branch/HEAD, and uncommitted files. Use it as the first pass, then verify manually.
+`resume_status.py` prints the master version, status, mode, phase table, current phase, approval, implementation mode, commit record, closeout verdict, acceptance progress, affected discoveries, git branch/HEAD, and uncommitted files. Use it as the first pass, then verify manually.
 
 Reconcile these pairs:
 
@@ -52,6 +52,7 @@ Reconcile these pairs:
 | Phase `ready` | Is `Approved by` set, and is the plan validated against the current master version? |
 | Phase `done` | Does the recorded commit exist and is it an ancestor of HEAD? Is the verdict `addressed`? Does every A and claimed D have a `met` closeout row with evidence? Are all code-standards boxes checked? |
 | Working tree clean | Does `git status` agree? If dirty, identify which phase the changes belong to. |
+| Mode `yolo` | Does `Mode authorized by` name the user and date? Is the draft PR open and its head `plan/<slug>`? If either is missing, stop before continuing; do not auto-approve. |
 | Tests pass | Run the phase verification before trusting old evidence. |
 | Standards check clean | Run the master's standards commands and read the phase plan's `Code standards check`. |
 | Discoveries applied | Does the phase plan list every ledger row whose `Affects` includes it? |
@@ -85,13 +86,13 @@ Legacy done phases may lack `Implemented by`, `Implemented at`, checked code-sta
 | Current phase state | Next action |
 |---|---|
 | No phase plan yet | Write the plan with `write-plan <plan-dir> P<n>`; keep it `draft`/`planned`. |
-| Plan written, not approved | Present the plan to the user and ask for approval. If the user requests changes, use `refine-phase`; if it was already ready, run `reopen` first. |
+| Plan written, not approved | Present the plan to the user and ask for approval. If the user requests changes, use `refine-phase`; if it was already ready, run `reopen` first. In yolo mode, run `approve --yolo` and continue instead. |
 | Approved and `ready` | Set `in_progress`, spawn the implementation subagent, and wait. |
 | `in_progress` | Inspect the worker's files, verification, closeout, and commit; run `scope`; do not reimplement. Finish the coordinator review. |
 | `partial` closeout | Continue the remaining steps with a subagent, or leave the phase `in_progress` with a handoff. |
-| `done` | Write the next phase plan and stop at the approval gate. |
+| `done` | Write the next phase plan and stop at the approval gate. In yolo mode, write it, auto-approve it, and continue. |
 | `blocked` | Report the blocker, owner, and unblocking condition. Do not start a different phase without approval. |
-| `needs_replan` | Rewrite the phase plan against the current master, then ask for approval. |
+| `needs_replan` | Rewrite the phase plan against the current master, then ask for approval. In yolo mode, revalidate and auto-approve it. |
 
 If the current phase is already implemented but not committed, finish the closeout and commit gate before starting anything new. If it is committed but the master is stale, update the master before writing the next phase.
 
@@ -99,15 +100,16 @@ If the current phase is already implemented but not committed, finish the closeo
 
 Once the state is reconciled, follow `../progressive-plan/references/gates.md`. The resume-specific rules are:
 
-- Do not implement an unapproved phase. Ask: "The P<n> plan is ready at `<path>. Approve implementation?"
+- Do not implement an unapproved phase. Ask: "The P<n> plan is ready at `<path>. Approve implementation?" In yolo mode, run `approve --yolo` instead; the master authorization replaces this question.
 - Use `reopen` when a ready or done phase needs plan changes; do not edit approval fields by hand.
 - Use `record-commit` and `close`; do not mark a phase done by editing the status fields.
 - Run `scope <plan-dir> <phase>` before accepting a worker's commit.
 - If a draft PR is open, push every commit as it is created, including plan, approval, and closeout metadata commits.
 - Before presenting a plan for approval, commit it with a `plan:` subject and push it when a draft PR is open. If no draft PR exists and the master records no decline, offer one first (see `../progressive-plan/references/gates.md`).
-- When the master is complete, follow the completed-plan file gate: ask whether to keep or remove the plan files, archive them under `<plans-root>/archive/<slug>/` when kept, push the disposition commit, and update the PR title and body for the implemented outcome. The title uses a conventional-commit prefix; the body covers the issue, what was done, the decisions, and verification.
+- When the master is complete, follow the completed-plan file gate: ask whether to keep or remove the plan files, archive them under `<plans-root>/archive/<slug>/` when kept, push the disposition commit, and update the PR title and body for the implemented outcome. The title uses a conventional-commit prefix; the body covers the issue, what was done, the decisions, and verification. In yolo mode, archive them, update the PR, and leave it as a draft without asking.
 - If a closeout reports a `new-phase` discovery, verify the master phase map has that phase as `planned` and that the current phase did not implement it.
-- Do not start the next phase because it looks easy. Close the current phase and stop at the next approval gate.
+- Do not start the next phase because it looks easy. Close the current phase and stop at the next approval gate, unless the master records `Mode: yolo`.
+- In yolo mode, stop only at the Yolo mode stop conditions in `../progressive-plan/SKILL.md`. Push every commit, keep the PR a draft, and archive the plan files at the end without asking.
 
 ## 5. Report the resume state
 
@@ -115,7 +117,7 @@ Before the first implementation action, send a short report:
 
 ```text
 Resume — <plan title>
-Master: v<n>, <status>
+Master: v<n>, <status>, mode <standard|yolo>
 Current phase: P<n> — <name> (<status>)
 Approval: approved by <user> on <date> | pending
 Commit: <hash> | none
@@ -139,6 +141,7 @@ Lead with whether the phase is approved, in progress, or done. Do not bury a pen
 - **Scope absorption** — letting a worker's out-of-scope discovery become part of the current phase instead of a new phase.
 - **Unpushed review PR** — resuming while plan or closeout commits stay local and the draft PR shows stale content.
 - **Plan leftovers** — completing a master without deciding whether to archive or remove its plan files.
+- **Yolo without its guardrails** — resuming a yolo master without the recorded authorization or the draft PR, or asking for per-phase approval the mode already replaced.
 
 ## Files
 

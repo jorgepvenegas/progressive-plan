@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -268,6 +269,7 @@ class ScaffoldTests(PlanTestCase):
         plan_dir = self.new_plan()
         master = self.master(plan_dir)
         self.assertIn("Size: small", master)
+        self.assertIn("Mode: standard", master)
         self.assertIn("Plan directory: `plans/test-plan`", master)
         self.assertIn("Branch: `plan/test-plan`", master)
 
@@ -325,6 +327,93 @@ class ScaffoldTests(PlanTestCase):
             )
         ids = [row["id"] for row in planlib.phase_rows(self.master(plan_dir))]
         self.assertEqual(ids, ["P1", "P2", "P3"])
+
+
+class YoloModeTests(PlanTestCase):
+    def test_new_yolo_records_mode_and_authorization(self) -> None:
+        result = run_cli(
+            self.tmp,
+            "new",
+            "Overnight Plan",
+            "--root",
+            "plans",
+            "--mode",
+            "yolo",
+            "--authorized-by",
+            "Jorge",
+        )
+        self.assert_ok(result)
+        master = self.master(self.tmp / "plans" / "overnight-plan")
+        self.assertIn("- Mode: yolo", master)
+        self.assertIn(
+            f"- Mode authorized by: Jorge, {date.today().isoformat()}", master
+        )
+        self.assert_ok(run_cli(self.tmp, "check", "plans/overnight-plan"))
+
+    def test_new_yolo_requires_authorized_by(self) -> None:
+        result = run_cli(
+            self.tmp, "new", "Unsafe", "--root", "plans", "--mode", "yolo"
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires --authorized-by", result.stdout + result.stderr)
+        self.assertFalse((self.tmp / "plans" / "unsafe").exists())
+
+    def test_check_rejects_yolo_without_authorization(self) -> None:
+        plan_dir = self.new_plan()
+        master = self.master(plan_dir).replace("- Mode: standard", "- Mode: yolo", 1)
+        (plan_dir / "master.md").write_text(master, encoding="utf-8")
+        result = run_cli(self.tmp, "check", str(plan_dir))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Mode authorized by", result.stdout + result.stderr)
+
+    def test_check_rejects_unknown_mode(self) -> None:
+        plan_dir = self.new_plan()
+        master = self.master(plan_dir).replace("- Mode: standard", "- Mode: turbo", 1)
+        (plan_dir / "master.md").write_text(master, encoding="utf-8")
+        result = run_cli(self.tmp, "check", str(plan_dir))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Mode must be one of", result.stdout + result.stderr)
+
+    def test_status_reports_mode(self) -> None:
+        self.assert_ok(
+            run_cli(
+                self.tmp,
+                "new",
+                "Overnight Plan",
+                "--root",
+                "plans",
+                "--mode",
+                "yolo",
+                "--authorized-by",
+                "Jorge",
+            )
+        )
+        result = run_cli(self.tmp, "status", "plans/overnight-plan", "--json")
+        self.assert_ok(result)
+        self.assertEqual(json.loads(result.stdout)["mode"], "yolo")
+
+    def test_approve_yolo_requires_yolo_master(self) -> None:
+        make_valid_plan(self.tmp, "planned")
+        result = run_cli(
+            self.tmp, "approve", "plans/valid-plan", "P1", "--by", "Jorge", "--yolo"
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires a master plan with '- Mode: yolo'", result.stdout + result.stderr)
+
+    def test_approve_yolo_records_authorization(self) -> None:
+        plan_dir = make_valid_plan(self.tmp, "planned")
+        master = self.master(plan_dir).replace(
+            "- Size: small\n",
+            "- Size: small\n- Mode: yolo\n- Mode authorized by: Jorge, 2026-11-20\n",
+            1,
+        )
+        (plan_dir / "master.md").write_text(master, encoding="utf-8")
+        result = run_cli(
+            self.tmp, "approve", str(plan_dir), "P1", "--by", "Jorge", "--yolo"
+        )
+        self.assert_ok(result)
+        self.assertIn("- Approved by: Jorge (yolo)", self.plan(plan_dir))
+        self.assert_ok(run_cli(self.tmp, "check", str(plan_dir)))
 
 
 class ApprovalTests(PlanTestCase):

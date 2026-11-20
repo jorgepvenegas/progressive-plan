@@ -8,7 +8,7 @@ The skills use the open [Agent Skills](https://agentskills.io) format. Each one 
 
 | Skill | Use it when |
 |---|---|
-| `progressive-plan` | Starting from an issue or request, sizing the work, writing a master plan and just-in-time phase plans, approving each phase, and delegating implementation. |
+| `progressive-plan` | Starting from an issue or request, sizing the work, writing a master plan and just-in-time phase plans, approving each phase, and delegating implementation. Supports unattended yolo mode for a whole-plan draft PR. |
 | `plan-resume` | Starting a new session against an existing `docs/plans` master and phase plans, or continuing after an interruption. |
 | `refine-phase` | The user rejects an unapproved phase plan or asks for changes before approving it. |
 
@@ -50,7 +50,7 @@ flowchart TD
     class Master,Phase artifact
 ```
 
-`progressive-plan` owns the loop: intake, sizing, the master plan, just-in-time phase plans, the approval gate, delegation, closeout, and the commit gate. `refine-phase` handles a rejected phase plan and returns it to the approval gate. `plan-resume` re-enters the loop for an existing plan by reconstructing state from `master.md`, the phase plan, and git history. Implementation does not start until the user explicitly approves the current phase. Each generated `master.md` also carries a `Goal flow` section: a small Mermaid diagram of the user-visible outcome for the person approving phases. Existing masters are upgraded by `plan-resume` before it continues. Each master records the project's real format, lint, type-check, and test commands, and a phase cannot be `done` while its code standards check is open.
+`progressive-plan` owns the loop: intake, sizing, the master plan, just-in-time phase plans, the approval gate, delegation, closeout, and the commit gate. `refine-phase` handles a rejected phase plan and returns it to the approval gate. `plan-resume` re-enters the loop for an existing plan by reconstructing state from `master.md`, the phase plan, and git history. Implementation does not start until the user explicitly approves the current phase, unless the master records yolo mode. Each generated `master.md` also carries a `Goal flow` section: a small Mermaid diagram of the user-visible outcome for the person approving phases. Existing masters are upgraded by `plan-resume` before it continues. Each master records the project's real format, lint, type-check, and test commands, and a phase cannot be `done` while its code standards check is open.
 
 When a plan is ready for review, the skill asks whether to open a draft PR so the user can read it on GitHub. If one is open, every plan, phase, and closeout commit is pushed as it is created. When the master plan is complete, the skill asks whether to keep the plan files or remove them from the PR. Keeping them archives the plan under `docs/plans/archive/<slug>/`, so a new master plan can use the active path again; removing them leaves only the product changes in the PR. After that decision, the skill updates the PR title to a conventional-commit title (`feat:`, `fix:`, and so on) and rewrites the body with the issue, what was done, the decisions, and verification.
 
@@ -58,16 +58,35 @@ When a plan is ready for review, the skill asks whether to open a draft PR so th
 
 `new --size small` uses compact master and phase templates. All sizes keep the same required sections and gates.
 
+## Yolo mode
+
+Yolo mode implements a whole master plan unattended and returns a draft PR for a human to review. The user authorizes it once, at plan creation:
+
+```bash
+python3 skills/progressive-plan/scripts/progressive_plan.py new "Overnight import work" \
+  --mode yolo --authorized-by "Jorge"
+```
+
+The master records `Mode: yolo` and `Mode authorized by: <user>, <date>`. `check` refuses a yolo master without that authorization, and `approve --yolo` refuses a master that is not in yolo mode. Each phase is still planned, checked, delegated to one worker, reviewed, closed out, committed, and pushed. The difference is that phase approval uses the master authorization instead of waiting for the user:
+
+```bash
+python3 skills/progressive-plan/scripts/progressive_plan.py approve docs/plans/<slug> P1 --by "Jorge" --yolo
+```
+
+The coordinator opens the draft PR before implementation and pushes every commit. At the end it archives the plan files, updates the PR title and body, and leaves the PR as a draft. It never merges, deploys, releases, or marks the PR ready. It stops and reports on a blocked phase, a scope or contract change, a product decision, failing verification that cannot be fixed honestly, a repeated worker failure, missing credentials, or an exhausted budget.
+
 ## Commands
 
 ```bash
 # Scaffold
 python3 skills/progressive-plan/scripts/progressive_plan.py new "<Title>" --root docs/plans --size small
+python3 skills/progressive-plan/scripts/progressive_plan.py new "<Title>" --mode yolo --authorized-by "Jorge"
 python3 skills/progressive-plan/scripts/progressive_plan.py add-phase docs/plans/<slug> "<Phase>" --depends none --outline
 python3 skills/progressive-plan/scripts/progressive_plan.py write-plan docs/plans/<slug> P1
 
 # Approve and implement
 python3 skills/progressive-plan/scripts/progressive_plan.py approve docs/plans/<slug> P1 --by "<user>"
+python3 skills/progressive-plan/scripts/progressive_plan.py approve docs/plans/<slug> P1 --by "<user>" --yolo
 python3 skills/progressive-plan/scripts/progressive_plan.py reopen docs/plans/<slug> P1
 
 # Record and close

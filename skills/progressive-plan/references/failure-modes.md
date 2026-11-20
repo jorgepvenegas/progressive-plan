@@ -19,6 +19,10 @@
 - **Scope creep** — accepting unrelated work or opportunistic fixes into an approved phase.
 - **New-work absorption** — doing a later phase's work inside the current phase instead of adding a new phase and planning it separately.
 - **Malformed rows** — a phase or ledger row with the wrong column count. The scripts flag these instead of skipping them.
+- **Unrecorded yolo** — auto-approving phases without `Mode: yolo` and the authorizing user in the master.
+- **Yolo without a review artifact** — implementing unattended without a draft PR or remote, so the human has nothing to review.
+- **Yolo past a blocker** — continuing to later phases after a blocked phase, a contract or scope change, or verification that cannot pass honestly.
+- **Yolo delivery** — merging, deploying, releasing, marking the PR ready, or rewriting history after unattended work.
 
 ## Closeout
 

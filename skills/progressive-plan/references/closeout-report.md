@@ -4,6 +4,7 @@ End every closeout with a short report in this shape:
 
 ```text
 Phase P2 closeout — <phase name>
+Mode: standard | yolo
 Verdict: addressed | partial | blocked
 Master coverage: D1 met (<evidence>), D2 partial (<gap>), D3 not started
 Discoveries no earlier plan predicted: <one line each, or "none">
