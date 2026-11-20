@@ -31,6 +31,7 @@ VALID_TYPES = {
 }
 VALID_LEDGER_STATUSES = {"open", "applied", "superseded", "wontfix"}
 VALID_SIZES = {"small", "medium", "large"}
+VALID_MODES = {"standard", "yolo"}
 
 # master status -> phase plan status
 PHASE_STATUS_MAP = {
@@ -146,6 +147,10 @@ def bump_int_field(text: str, name: str, amount: int = 1) -> str:
     except ValueError:
         value = 0
     return set_field(text, name, str(value + amount))
+
+
+def master_mode(text: str) -> str:
+    return (field(text, "Mode") or "standard").strip().lower()
 
 
 def master_version(text: str) -> int | None:
@@ -564,6 +569,21 @@ def _validate_master_header(
             f"master: Size must be one of {', '.join(sorted(VALID_SIZES))}; "
             f"found '{size or 'missing'}'"
         )
+
+    mode = master_mode(master)
+    if mode not in VALID_MODES:
+        errors.append(
+            f"master: Mode must be one of {', '.join(sorted(VALID_MODES))}; "
+            f"found '{mode}'"
+        )
+    elif mode == "yolo":
+        authorized_by = field(master, "Mode authorized by")
+        if is_pending(authorized_by) or (
+            authorized_by and placeholder_findings(authorized_by)
+        ):
+            errors.append(
+                "master: Mode is yolo but '- Mode authorized by' is missing or pending"
+            )
 
     goal_flow = section(master, "Goal flow")
     if goal_flow and "```mermaid" not in goal_flow:
@@ -1284,6 +1304,7 @@ def build_status(plan_dir: Path, phase_override: str | None = None) -> dict[str,
     master = read_text(master_file)
     version = master_version(master)
     status = field(master, "Status")
+    mode = master_mode(master)
     rows = phase_rows(master)
     check = validate_plan(plan_dir)
     current = current_phase_id(master, rows, phase_override)
@@ -1303,7 +1324,12 @@ def build_status(plan_dir: Path, phase_override: str | None = None) -> dict[str,
             f"resume brief says current phase {brief_phase}, plan state says {current}"
         )
 
-    next_action = "Write the next phase plan from the master and stop for approval."
+    yolo = mode == "yolo"
+    next_action = (
+        "Write the next phase plan, check it, auto-approve it, and continue."
+        if yolo
+        else "Write the next phase plan from the master and stop for approval."
+    )
     if check["errors"]:
         next_action = "Fix the plan validation errors before any implementation."
     elif not rows:
@@ -1311,7 +1337,13 @@ def build_status(plan_dir: Path, phase_override: str | None = None) -> dict[str,
     elif all(row["status"] == "done" for row in rows):
         next_action = (
             "All phases are done. Run the final definition-of-done sweep, "
-            "then offer a draft PR and ask whether to keep or remove the plan files."
+            + (
+                "then archive the plan files, update the PR title and body, "
+                "and leave the draft PR for review."
+                if yolo
+                else "then offer a draft PR and ask whether to keep or remove "
+                "the plan files."
+            )
         )
     elif current_row is not None:
         if current_row["status"] == "in_progress":
@@ -1327,9 +1359,19 @@ def build_status(plan_dir: Path, phase_override: str | None = None) -> dict[str,
         elif current_row["status"] == "blocked":
             next_action = "Report the blocker, owner, and unblocking condition."
         elif current_row["status"] == "needs_replan":
-            next_action = "Rewrite the phase plan against the current master, then ask for approval."
+            next_action = (
+                "Rewrite the phase plan against the current master, then "
+                + ("auto-approve it with --yolo and continue." if yolo else "ask for approval.")
+            )
         elif current_row["status"] == "planned":
-            next_action = "Write or complete the phase plan, run check, then ask for approval."
+            next_action = (
+                "Write or complete the phase plan, run check, then "
+                + (
+                    "auto-approve it with approve --yolo and start implementation."
+                    if yolo
+                    else "ask for approval."
+                )
+            )
 
     title = master.splitlines()[0].lstrip("# ").strip() if master.splitlines() else plan_dir.name
     title = re.sub(r"^Master Plan\s*[—-]\s*", "", title)
@@ -1338,6 +1380,8 @@ def build_status(plan_dir: Path, phase_override: str | None = None) -> dict[str,
         "plan_dir": str(plan_dir),
         "master_version": version,
         "master_status": status,
+        "mode": mode,
+        "mode_authorized_by": field(master, "Mode authorized by"),
         "size": field(master, "Size"),
         "branch": field(master, "Branch"),
         "resume_brief": brief.splitlines(),
@@ -1442,6 +1486,8 @@ def build_resume_report(
         "plan_dir": str(plan_dir),
         "master_version": status["master_version"],
         "master_status": status["master_status"],
+        "mode": status["mode"],
+        "mode_authorized_by": status["mode_authorized_by"],
         "resume_brief": status["resume_brief"],
         "phases": rows,
         "current_phase": phase,
@@ -1491,7 +1537,8 @@ def render_resume_text(report: dict[str, Any]) -> str:
     lines.append(f"Resume — {report['title']}")
     lines.append(f"Plan directory: {report['plan_dir']}")
     lines.append(
-        f"Master: v{report['master_version']}, status {report['master_status']}"
+        f"Master: v{report['master_version']}, status {report['master_status']}, "
+        f"mode {report['mode']}"
     )
     lines.append("")
     lines.append("Phase map:")
@@ -1573,7 +1620,8 @@ def render_status_text(status: dict[str, Any]) -> str:
     if "error" in status:
         return f"error: {status['error']}"
     lines = [
-        f"{status['title']} — master v{status['master_version']} ({status['master_status']})"
+        f"{status['title']} — master v{status['master_version']} "
+        f"({status['master_status']}, {status['mode']})"
     ]
     lines.extend(_phase_map_lines(status["phases"]))
     if status["resume_brief"]:
@@ -1603,6 +1651,7 @@ def render_report(plan_dir: Path) -> str:
     lines.append(
         f"- Master version: {status['master_version']}\n"
         f"- Status: {status['master_status']}\n"
+        f"- Mode: {status['mode']}\n"
         f"- Size: {status['size']}\n"
         f"- Branch: {status['branch']}\n"
         f"- Plan directory: `{plan_dir}`"

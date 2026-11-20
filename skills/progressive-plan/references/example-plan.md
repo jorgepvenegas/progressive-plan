@@ -13,6 +13,8 @@ This is a filled example, not a template. It shows the minimum useful content fo
 - Created: 2026-11-14
 - Source: user request
 - Size: small
+- Mode: standard
+- Mode authorized by: none
 - Owner: coordinator
 - Plan directory: `docs/plans/add-dry-run`
 - Branch: `plan/add-dry-run`

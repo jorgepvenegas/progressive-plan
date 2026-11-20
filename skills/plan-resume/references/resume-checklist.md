@@ -6,6 +6,7 @@ Use this with `scripts/resume_status.py`. Tick every item before the first edit.
 
 - [ ] `master.md` read in full.
 - [ ] Resume brief read; current phase matches the phase map.
+- [ ] Master `Mode` read. For `yolo`, `Mode authorized by` names the user and date, and the draft PR is open.
 - [ ] Master version matches every `ready`/`in_progress` phase plan's `Validated against master version`.
 - [ ] Current phase plan read in full.
 - [ ] `progressive_plan.py check` passes.
@@ -16,7 +17,7 @@ Use this with `scripts/resume_status.py`. Tick every item before the first edit.
 - [ ] `Approved by` and `Approved at` are set for the current phase.
 - [ ] `Implementation mode` is `subagent`, or a coordinator exception has an approving user and a reason.
 - [ ] The current phase is `in_progress` only after approval.
-- [ ] If not approved, the next action is to ask the user, not to implement.
+- [ ] If not approved, the next action is to ask the user, not to implement; in `yolo` mode, auto-approve with `--yolo` and continue.
 - [ ] For a done phase, `Implemented by` and `Implemented at` are set.
 - [ ] For a done phase, every A and claimed D has a `met` closeout row with evidence, and every code-standards box is checked.
 
@@ -42,7 +43,7 @@ Use this with `scripts/resume_status.py`. Tick every item before the first edit.
 ## Handoff
 
 - [ ] The resume report states the next legal action.
-- [ ] If the phase is done, the next phase plan is written, committed with a `plan:` subject, pushed when a draft PR is open, and the session stops at the approval gate.
+- [ ] If the phase is done, the next phase plan is written, committed with a `plan:` subject, pushed when a draft PR is open, and the session stops at the approval gate; in `yolo` mode, it auto-approves and continues.
 - [ ] If the phase is blocked, the blocker, owner, and unblocking condition are written in the phase plan and master.
-- [ ] If the master is complete, the plan-file decision is recorded: files removed from the PR, archived under `<plans-root>/archive/<slug>/`, or kept in place.
+- [ ] If the master is complete, the plan-file decision is recorded: files removed from the PR, archived under `<plans-root>/archive/<slug>/`, or kept in place. In `yolo` mode, archive them without asking.
 - [ ] If the master is complete, the PR title uses a conventional-commit prefix and the body covers the issue, what was done, the decisions, and verification.

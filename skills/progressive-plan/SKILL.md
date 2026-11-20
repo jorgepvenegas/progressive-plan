@@ -1,6 +1,6 @@
 ---
 name: progressive-plan
-description: Plan and execute coding work through a master plan, just-in-time phase plans, per-phase approval, delegated implementation, evidence-based closeout, and commits. Use for an issue, request, small task, or multi-phase project.
+description: Plan and execute coding work through a master plan, just-in-time phase plans, per-phase approval or unattended yolo mode, delegated implementation, evidence-based closeout, and commits. Use for an issue, request, small task, or multi-phase project.
 ---
 
 # Progressive Plan
@@ -8,6 +8,8 @@ description: Plan and execute coding work through a master plan, just-in-time ph
 Start from the source issue or request, size the work, and choose a one-phase plan for small tasks or a multi-phase master for large ones. A master plan states the outcome and splits the work into phases. Each phase gets a detailed sub-plan written just before it starts. No phase implementation begins until the user has seen that phase's plan and explicitly approved it. Every approved phase is implemented by a subagent; the coordinator plans, reviews, and closes out, but does not write product code. At the end of every implementation session, the agent proves what the master plan owed, records what no earlier plan predicted, updates the master plan, commits the phase, and only then calls the phase done.
 
 This skill is the coordinator's operating loop. It works for one agent doing all the work and for a coordinator delegating phases to subagents. The shared gate rules are in `references/gates.md`.
+
+With explicit user authorization, `Mode: yolo` runs the loop unattended: each phase is planned, checked, auto-approved, delegated, verified, and committed without waiting for a per-phase review question. The result is a draft PR with the whole plan implemented for a human to review. Yolo mode never merges, deploys, releases, or marks the PR ready.
 
 ## Artifacts
 
@@ -33,11 +35,11 @@ Run these from the repository root. Each command is `python3 <skill-dir>/scripts
 
 | Command | Use |
 |---|---|
-| `new "<Title>" --root docs/plans --size small` | Create the master; `--size` is `small`, `medium`, or `large`. |
+| `new "<Title>" --root docs/plans --size small` | Create the master; `--size` is `small`, `medium`, or `large`. Add `--mode yolo --authorized-by "<user>"` for unattended execution. |
 | `add-phase <plan-dir> "<Name>" --depends P1 --outcome "<text>"` | Add a phase row and a draft plan. |
 | `add-phase <plan-dir> "<Name>" --outline` | Add only a `planned` row; write the plan later. |
 | `write-plan <plan-dir> P2` | Create the plan for an outline phase. |
-| `approve <plan-dir> P2 --by "<user>"` | Validate, record approval, and set the phase `ready`. |
+| `approve <plan-dir> P2 --by "<user>"` | Validate, record approval, and set the phase `ready`. Add `--yolo` in yolo mode. |
 | `approve ... --allow-unmet-dependency` | Approve intentional parallel work before its dependencies are done. |
 | `reopen <plan-dir> P2` | Reset a phase to `draft` for refinement. |
 | `record-commit <plan-dir> P2 --by <worker>` | Record the phase commit and implementer. |
@@ -60,6 +62,8 @@ To resume an existing plan, run `status` first, then `plan-resume`. Read `master
 ## Task intake and sizing
 
 Start here for a new request that changes the repository. Answer questions and do read-only investigation directly; do not scaffold a plan for them. For repository work, do not write a plan from the prompt alone. Read the source, scope it against the repository, ask about gaps, and size the work before choosing the plan shape. See `references/issue-intake.md` for source recipes, a scoping brief, sizing examples, and escalation rules.
+
+If the user asks to implement the whole plan unattended (overnight, a long run, or no per-phase review), confirm yolo mode, its end state, and its stop conditions in this intake round. Scaffold with `--mode yolo --authorized-by "<user>"`; see Yolo mode.
 
 ### Read the source
 
@@ -231,6 +235,84 @@ If the plans were removed, the PR contains only the product changes; keep the ge
 
 **Plans that predate this rule.** If the master has no `Branch:` field and work already landed on the default branch, do not push the default branch or open a PR from it. Report the state and ask whether to create a retrospective branch. Do not rewrite history.
 
+## Yolo mode
+
+Yolo mode implements a whole master plan unattended: overnight, or across a long run. It ends with a draft PR for a human to review. It never merges, deploys, releases, publishes, or marks the PR ready. Use it only when the user explicitly asks for it for this plan.
+
+Record it at scaffold time:
+
+```bash
+python3 <skill-dir>/scripts/progressive_plan.py new "<Title>" \
+  --mode yolo --authorized-by "<user>"
+```
+
+The master then carries `- Mode: yolo` and `- Mode authorized by: <user>, <date>`. `check` fails a yolo master without that authorization, and `approve --yolo` refuses a master that is not in yolo mode. Do not switch an existing plan to yolo after a phase is approved unless the user explicitly asks; the mode is a start-of-plan decision.
+
+### Before the first phase
+
+Run intake and sizing as usual. This is the only review round; ask every question that changes scope, acceptance, risk, or the definition of done now. Then:
+
+1. Write the master and the first phase plan.
+2. Create `plan/<slug>`, push it, and open the draft PR before any implementation. The yolo authorization includes that draft PR. If `gh`, authentication, or a remote is missing, stop before implementation and report it; unattended work with no review artifact is not yolo work.
+3. Record `- PR: <url>` in the resume brief and commit it with `plan: record draft PR`.
+4. If the harness supports a goal, token, or time budget, set one and record it in the resume brief; it is a stop condition.
+5. Tell the user the PR URL, the stop conditions, and the default end state: plan files archived, PR updated, PR left as a draft.
+
+### The phase loop
+
+Repeat for each phase until every phase is `done` or a stop condition fires:
+
+1. Write the phase plan just in time, apply every affecting discovery, and run `check`.
+2. Auto-approve it:
+   ```bash
+   python3 <skill-dir>/scripts/progressive_plan.py approve <plan-dir> P<n> --by "<user>" --yolo
+   ```
+   The plan records `Approved by: <user> (yolo)`.
+3. Commit the plan with `plan: P<n> <name>` and push it.
+4. Set the phase `in_progress`, spawn one worker with `references/worker-prompt-template.md`, and wait.
+5. Review the worker's files, `scope` result, verification, closeout, and commit. Do not reimplement.
+6. Run `record-commit`, `close`, and `check`; commit `P<n>: record closeout`; push.
+7. Continue to the next phase without asking. Do not batch pushes or skip the closeout.
+
+If a discovery requires a phase that the master's definition of done already implies, add it with `add-discovery` and `add-phase --outline`, plan it, auto-approve it, and continue. If the discovery adds an outcome the master does not require, stop and report it; do not expand the master unattended.
+
+### At the end
+
+Run the final definition-of-done sweep. If any item is unmet, the phase is `partial`, not done; stop and report. Otherwise set the phase `done`, then:
+
+1. Archive the plan files under `<plans-root>/archive/<slug>/` with `archive`, and commit `plan: archive <slug>`. Remove them instead only when the user asked for a product-only PR.
+2. Update the PR title and body from `report <plan-dir>`, with a conventional-commit title and the issue, what was done, decisions, and verification.
+3. Run the repository's checks once more and, when the project has required CI, check the PR's checks. A failing required check is a stop condition, not a reason to mark the PR ready.
+4. Leave the PR as a draft. Report the PR URL, phase table, definition-of-done verdicts, decisions, discoveries, verification commands, remaining risks, and any failing check.
+
+### Stop conditions
+
+Stop, record the state, push a WIP checkpoint, and report. Do not guess:
+
+- a phase is `blocked` or `needs_replan`;
+- the work needs a change to the user-visible contract, scope, or an acceptance criterion;
+- a discovery is a `scope-change` or needs a product decision the master does not settle;
+- the standards or verification cannot pass without weakening a test, lint rule, or criterion;
+- the same phase fails twice, or three phases in a row are blocked;
+- a file outside the phase's file list is needed and the plan cannot be amended within the master's contract;
+- the remote, `gh`, or credentials are unavailable, or a push fails;
+- a required CI check fails;
+- the session or token budget is nearly exhausted.
+
+On a stop, set the phase `blocked` or leave it `in_progress` with a `partial` closeout, commit `P<n>: <name> [WIP]`, push it, update the resume brief with the blocker and next action, and end the session. Do not start a different phase to fill time.
+
+If the harness restarts or the session ends mid-plan, leave the same checkpoint. `plan-resume` reads `Mode: yolo` and continues without asking for phase approval.
+
+### Never in yolo mode
+
+- merge, squash, or close the PR;
+- deploy, release, publish, or run a production migration;
+- mark the PR ready, approve it, or request review;
+- force-push, rewrite history, or delete the branch;
+- leave `plan/<slug>` or commit to the default branch;
+- weaken or delete tests, lint rules, type checks, or acceptance criteria to make progress;
+- implement work outside the approved master or absorb an out-of-scope discovery.
+
 ## The loop
 
 ### 1. Intake, size, then write the plan
@@ -281,21 +363,21 @@ Leave the phase status `draft` and the master row `planned` while the plan is be
 
 A plan is ready for approval only when it has no template placeholders, at least one step, one phase acceptance criterion, and one traceability row for every criterion, plus a `Prior discoveries applied` row for every affecting ledger entry. `approve` enforces these checks and refuses an unfilled plan.
 
-When `check` passes, commit the plan with `plan: P<n> <name>` and push it if a draft PR is open. Then present it for review. If no draft PR exists and the master records no decline, offer one now (see Branch and PR gates) so the user can read the plan on GitHub.
+When `check` passes, commit the plan with `plan: P<n> <name>` and push it if a draft PR is open. Then present it for review. If no draft PR exists and the master records no decline, offer one now (see Branch and PR gates) so the user can read the plan on GitHub. In yolo mode, auto-approve the checked plan and continue; do not wait for review.
 
 ### Approval gate (required before every phase)
 
-A phase may move to `ready` only after the user has seen its plan and explicitly approved it. This gate applies to every phase, including phases that look small or obvious.
+A phase may move to `ready` only after the user has seen its plan and explicitly approved it. This gate applies to every phase, including phases that look small or obvious. In a master with `Mode: yolo`, the recorded master authorization replaces the per-phase review question: write and check the plan, skip the review steps below, and run `approve ... --yolo`. Every other gate still applies.
 
 1. Finish the phase plan and run `check`. Keep the phase `draft` / master `planned`. If `check` reports a missing master section, repair the master from `references/master-template.md` before asking for approval. Do not mark the phase ready while `check` fails.
 2. Commit the plan with `plan: P<n> <name>` and push it if a draft PR is open. If no draft PR exists and the master records no decline, ask the review-PR question first and record the answer.
 3. Send the user a short review request: absolute plan path, phase outcome, acceptance criteria, top risks, and the draft PR URL if one exists. Ask directly: "Approve implementation of phase Pn?"
 4. Wait. Do not edit implementation files, set `in_progress`, or spawn a worker for that phase. If the user asks for changes instead of approving, use the `refine-phase` skill (sibling directory); keep the phase `draft` and return to this gate after the refinement.
-5. On explicit approval, run `progressive_plan.py approve <plan-dir> <phase-id> --by "<user>"`. It validates the content and coverage, resets stale implementation fields, writes `Approved by` and `Approved at`, sets the phase and master row to `ready`, and sets the master status to `active`. Commit the approval metadata with `plan: P<n> approval` and push it if a draft PR is open.
+5. On explicit approval, run `progressive_plan.py approve <plan-dir> <phase-id> --by "<user>"`. It validates the content and coverage, resets stale implementation fields, writes `Approved by` and `Approved at`, sets the phase and master row to `ready`, and sets the master status to `active`. Commit the approval metadata with `plan: P<n> approval` and push it if a draft PR is open. Add `--yolo` in yolo mode; it records `Approved by: <user> (yolo)`.
 6. Only then set the phase `in_progress` in the master and start step 1.
-7. Approval of one phase does not approve any later phase. Repeat the gate for every phase. If the user requests changes instead of approving, use `refine-phase`; if the phase was already ready, run `reopen` first.
+7. Outside yolo mode, approval of one phase does not approve any later phase. Repeat the gate for every phase. If the user requests changes instead of approving, use `refine-phase`; if the phase was already ready, run `reopen` first.
 
-Silence, a prior "keep going", approval of the master plan, or approval of an earlier phase is **not** approval of the current phase. Do not infer it. If the user asks to skip review, record that instruction in the phase plan and master before starting.
+Silence, a prior "keep going", approval of the master plan, or approval of an earlier phase is **not** approval of the current phase. Do not infer it. If the user asks to skip review for the whole plan, use yolo mode and record the authorization in the master before starting.
 
 ### 3. Implement inside the phase by delegation
 
@@ -432,9 +514,9 @@ If the session ends `partial` or `blocked`, commit a WIP checkpoint with the sam
 
 ### 6. Hand off cleanly
 
-Update the resume brief in the master: current phase, last verdict, next action, open decisions. Write the next phase plan only when the previous phase is closed, then stop at the approval gate and ask the user. The next session starts with the `plan-resume` skill, which reads the master plan, the current phase plan, the git state, and the recorded commit; do not rely on conversation history that a later session will not have.
+Update the resume brief in the master: current phase, last verdict, next action, open decisions. Write the next phase plan only when the previous phase is closed, then stop at the approval gate and ask the user. The next session starts with the `plan-resume` skill, which reads the master plan, the current phase plan, the git state, and the recorded commit; do not rely on conversation history that a later session will not have. In yolo mode, write the next phase plan, auto-approve it, and continue; stop only at a stop condition.
 
-Run `progressive_plan.py status <plan-dir>` to confirm the next legal action. When the final phase is `done` and every definition-of-done item is met, run `report <plan-dir>` and follow the End of plan gate in Branch and PR gates: offer a draft PR if none exists, ask whether to keep or remove the plan files, archive them when kept, push every disposition commit, and update the PR title and body for the implemented outcome. The title uses a conventional-commit prefix; the body covers the issue, what was done, the decisions, and verification.
+Run `progressive_plan.py status <plan-dir>` to confirm the next legal action. When the final phase is `done` and every definition-of-done item is met, run `report <plan-dir>` and follow the End of plan gate in Branch and PR gates: offer a draft PR if none exists, ask whether to keep or remove the plan files, archive them when kept, push every disposition commit, and update the PR title and body for the implemented outcome. In yolo mode, use the defaults in Yolo mode instead of asking: archive the plan files, update the PR, and leave it as a draft. The title uses a conventional-commit prefix; the body covers the issue, what was done, the decisions, and verification.
 
 ## User-facing closeout report
 
@@ -458,6 +540,9 @@ The full list is in `references/failure-modes.md`. The most damaging are:
 - **Stale PR description** — the PR still describes the plan review after the whole plan is implemented. Update the title and body, including the issue, what was done, and the decisions.
 - **Plan leftovers** — a completed master stays at the active plan path, so the next plan cannot use the slug. Archive it or remove it from the PR.
 - **Default-branch implementation** and **PR without consent**.
+- **Yolo without authorization** — auto-approving phases under a master that does not record `Mode: yolo` and the authorizing user.
+- **Yolo that merges or deploys** — marking the PR ready, merging, releasing, or deploying after unattended work.
+- **Yolo past a blocker** — continuing phases after a blocked phase, a scope change, or failing verification instead of stopping and reporting.
 
 ## Files
 

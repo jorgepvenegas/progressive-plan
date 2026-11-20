@@ -21,6 +21,17 @@ A phase may move to `ready` only after the user has seen its plan and explicitly
 - Approval of one phase does not approve a later phase.
 - A phase that must run before its dependencies are done needs `Parallel safe: yes` or `approve --allow-unmet-dependency` for intentional parallel work.
 
+## Yolo mode gate
+
+A master with `- Mode: yolo` and `- Mode authorized by: <user>, <date>` replaces the per-phase approval question. It replaces no other gate.
+
+- The user opts in before the plan starts. `check` fails a yolo master without the authorization line, and `approve --yolo` refuses a master that is not in yolo mode.
+- Write each phase plan and run `check` as usual. Auto-approve it with `approve <plan-dir> P<n> --by "<user>" --yolo`; the phase plan records `Approved by: <user> (yolo)`.
+- Open the draft PR before implementation. The yolo authorization includes that draft PR. If `gh`, authentication, or a remote is missing, stop before implementation.
+- Keep the delegation, scope, closeout, commit, discovery, and push rules unchanged.
+- The plan ends with a draft PR, archived or removed plan files, and a report. It never merges, deploys, releases, or marks the PR ready.
+- Stop and report at the conditions listed in the `progressive-plan` Yolo mode section: a blocked or `needs_replan` phase, a contract or scope change, a product decision, standards that cannot pass honestly, a repeated worker failure, missing credentials, or an exhausted budget.
+
 ## Delegation and scope fence
 
 An approved phase is implemented by a subagent, not the coordinator.
@@ -74,6 +85,7 @@ Run the closeout at the end of every implementation session, and always before a
 - Do not create a plan branch in the middle of an existing plan.
 - When the master or a phase plan is drafted, checked, and about to be presented for review, ask whether to open a draft PR so the user can read the plan on GitHub. Ask once per branch; skip the offer when the master resume brief records `- PR: declined (<date>)` or a draft PR already exists.
 - Do not push or open a PR without explicit approval. Approval to open the review draft PR authorizes later pushes to that same branch.
+- In yolo mode, the master authorization covers creating the draft PR before implementation and every later push to `plan/<slug>`. It does not cover merging, deploying, or marking the PR ready.
 - Before an approval request, commit the plan with a `plan:` subject. If a draft PR is open, push it first.
 - Record the PR URL in the master resume brief as `- PR: <url>`.
 - At the end, offer a draft PR if none exists; do not push or open it without explicit approval.
@@ -90,3 +102,4 @@ After the final phase is `done` and every definition-of-done item is met, ask wh
 - If the user keeps the files in place, say that the slug stays occupied.
 - After the decision, update the PR title to a conventional-commit title and rewrite the body with the issue, what was done, the decisions, and verification.
 - Record the decision in the final report.
+- In yolo mode, do not ask: archive the plan files, update the PR title and body, and leave the PR as a draft. Remove the plan files instead only when the user asked for a product-only PR.

@@ -3,9 +3,10 @@
 
 Commands:
     new <title> [--root docs/plans] [--slug name] [--size small|medium|large]
+        [--mode standard|yolo --authorized-by "<user>"]
     add-phase <plan-dir> <name> [--depends P1] [--outcome text] [--outline]
     write-plan <plan-dir> <phase>
-    approve <plan-dir> <phase> --by <user> [--when YYYY-MM-DD]
+    approve <plan-dir> <phase> --by <user> [--when YYYY-MM-DD] [--yolo]
     reopen <plan-dir> <phase>
     record-commit <plan-dir> <phase> [--hash HASH] [--by WORKER]
     close <plan-dir> <phase> [--by WORKER] [--hash HASH]
@@ -32,6 +33,7 @@ from typing import Any
 
 from planlib import (
     VALID_LEDGER_STATUSES,
+    VALID_MODES,
     VALID_SIZES,
     VALID_TYPES,
     affecting_ledger,
@@ -55,9 +57,11 @@ from planlib import (
     invalid_phase_refs,
     is_pending,
     ledger_rows,
+    master_mode,
     master_version,
     phase_plan_path,
     phase_rows,
+    placeholder_findings,
     read_text,
     require_master_version,
     render_report,
@@ -274,6 +278,11 @@ def cmd_new(args: argparse.Namespace) -> None:
         fail(f"{slug} escapes {root_dir}")
     if plan_dir.exists():
         fail(f"{plan_dir} already exists")
+    authorized_by = "none"
+    if args.mode == "yolo":
+        if is_pending(args.authorized_by) or placeholder_findings(args.authorized_by or ""):
+            fail('--mode yolo requires --authorized-by "<user>"')
+        authorized_by = f"{args.authorized_by}, {date.today().isoformat()}"
     (plan_dir / "phases").mkdir(parents=True)
     template_name = (
         "master-template-small.md" if args.size == "small" else "master-template.md"
@@ -284,6 +293,8 @@ def cmd_new(args: argparse.Namespace) -> None:
         SLUG=slug,
         DATE=date.today().isoformat(),
         SIZE=args.size,
+        MODE=args.mode,
+        MODE_AUTHORIZED_BY=authorized_by,
         PLAN_DIR=plan_dir.as_posix(),
         BRANCH=f"plan/{slug}",
     )
@@ -308,6 +319,11 @@ def cmd_new(args: argparse.Namespace) -> None:
         f'next: python3 {Path(__file__)} add-phase {plan_dir} "<Phase name>" '
         "--depends none"
     )
+    if args.mode == "yolo":
+        print(
+            "yolo: create the plan branch and open the draft PR before implementation; "
+            "auto-approve each checked phase with approve --yolo"
+        )
 
 
 def cmd_add_phase(args: argparse.Namespace) -> None:
@@ -415,6 +431,11 @@ def cmd_approve(args: argparse.Namespace) -> None:
     if is_pending(args.by):
         fail("--by must name the approving user")
     master, row = _find_phase_row(plan_dir, args.phase)
+    if args.yolo:
+        if master_mode(master) != "yolo":
+            fail("--yolo requires a master plan with '- Mode: yolo'")
+        if is_pending(field(master, "Mode authorized by")):
+            fail("master records yolo mode without '- Mode authorized by'")
     if row["status"] in {"done", "superseded"}:
         fail(f"phase {args.phase} is already {row['status']}")
     if row["status"] == "in_progress":
@@ -463,7 +484,8 @@ def cmd_approve(args: argparse.Namespace) -> None:
         fail(f"phase {args.phase} is not ready for approval")
 
     plan_text = set_field(plan_text, "Status", "ready")
-    plan_text = set_field(plan_text, "Approved by", args.by)
+    approved_by = f"{args.by} (yolo)" if args.yolo else args.by
+    plan_text = set_field(plan_text, "Approved by", approved_by)
     plan_text = set_field(plan_text, "Approved at", args.when)
     plan_text = set_field(plan_text, "Commit", "pending")
     plan_text = set_field(plan_text, "Implemented by", "pending")
@@ -480,7 +502,7 @@ def cmd_approve(args: argparse.Namespace) -> None:
         plan_dir,
         only_phase=args.phase,
     )
-    print(f"approved {args.phase} by {args.by} on {args.when}")
+    print(f"approved {args.phase} by {approved_by} on {args.when}")
     print(f"phase plan: {plan_file}")
     print(f"master: {plan_dir / 'master.md'}")
 
@@ -949,6 +971,17 @@ def main() -> None:
     new.add_argument("--root", default="docs/plans")
     new.add_argument("--slug")
     new.add_argument("--size", choices=sorted(VALID_SIZES), default="medium")
+    new.add_argument(
+        "--mode",
+        choices=sorted(VALID_MODES),
+        default="standard",
+        help="execution mode; yolo auto-approves phases under a master authorization",
+    )
+    new.add_argument(
+        "--authorized-by",
+        default=None,
+        help='user who authorized yolo mode; required when --mode is yolo',
+    )
     new.set_defaults(func=cmd_new)
 
     add = sub.add_parser("add-phase", help="add the next phase to the master")
@@ -969,6 +1002,11 @@ def main() -> None:
     approve.add_argument("phase")
     approve.add_argument("--by", required=True)
     approve.add_argument("--when", default=date.today().isoformat())
+    approve.add_argument(
+        "--yolo",
+        action="store_true",
+        help="auto-approve under the master's yolo authorization",
+    )
     approve.add_argument(
         "--allow-unmet-dependency",
         action="store_true",

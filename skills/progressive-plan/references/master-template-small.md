@@ -6,11 +6,13 @@
 - Created: {{DATE}}
 - Source: <issue URL, ticket ID, or user request>
 - Size: {{SIZE}}
+- Mode: {{MODE}}
+- Mode authorized by: {{MODE_AUTHORIZED_BY}}
 - Owner: <coordinator agent or user>
 - Plan directory: `{{PLAN_DIR}}`
 - Branch: `{{BRANCH}}`
 
-`Status` is one of `draft`, `active`, `complete`, or `blocked`.
+`Status` is one of `draft`, `active`, `complete`, or `blocked`. `Mode` is `standard` or `yolo`; `yolo` auto-approves phases under the recorded `Mode authorized by` user and still never merges, deploys, or marks the PR ready.
 
 ## 1. Objective
 

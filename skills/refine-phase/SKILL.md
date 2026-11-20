@@ -7,6 +7,8 @@ description: Refine an unapproved progressive-plan phase plan after rejection or
 
 Use this skill when a `progressive-plan` phase plan is written but the user does not approve it. The goal is to turn the feedback into a precise, revalidated plan, obtain explicit approval, and then hand the approved phase to a subagent.
 
+In a master with `Mode: yolo`, the coordinator handles a worker-reported plan gap itself: amend the phase plan, run `check`, and continue with `approve --yolo`. Use this skill only when the change affects the user-visible contract, the master's definition of done, or the user actually rejects a phase.
+
 Do not implement product code during refinement. The approval gate stays closed until the user explicitly approves the revised plan.
 
 ## Quick start
@@ -146,7 +148,7 @@ Only after the user explicitly approves:
    - the draft PR URL or `none`,
    - the instruction to implement, verify, write the phase closeout, commit on the plan branch, push the phase commit when a draft PR is open, and report the hash.
 6. Keep the handle. Do not implement the phase in the coordinator.
-7. Report the handoff, then follow the normal `progressive-plan` closeout loop: review the worker's files, tests, closeout, and commit; run `scope`; record the commit with `record-commit --by`; close the phase with `close`; push every commit when a draft PR is open. When the final phase is done and all D items are met, run `report`, offer a draft PR if none exists, ask whether to keep or remove the plan files (archive them when kept), and update the PR title and body now that the plan is implemented. Use a conventional-commit title and cover the issue, what was done, the decisions, and verification.
+7. Report the handoff, then follow the normal `progressive-plan` closeout loop: review the worker's files, tests, closeout, and commit; run `scope`; record the commit with `record-commit --by`; close the phase with `close`; push every commit when a draft PR is open. When the final phase is done and all D items are met, run `report`, offer a draft PR if none exists, ask whether to keep or remove the plan files (archive them when kept), and update the PR title and body now that the plan is implemented. Use a conventional-commit title and cover the issue, what was done, the decisions, and verification. In yolo mode, archive the plan files, update the PR, and leave it as a draft without asking.
 
 If the user pauses or rejects without actionable feedback, keep the phase `draft`, record the round, and ask one focused question. If the user abandons the phase, set it `blocked` and name the reason.
 

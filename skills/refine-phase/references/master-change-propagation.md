@@ -43,15 +43,15 @@ If the feedback adds a separate outcome, add a phase instead of expanding the cu
 
 - Add a phase-map row with `add-phase <plan-dir> "<name>" --depends <deps> --outcome "<outcome>" --outline`; it bumps `Master version` and leaves the plan unwritten.
 - Do not add the new outcome as steps in the current phase.
-- Write the new phase plan with `write-plan` after the current phase closes, then stop at its approval gate.
+- Write the new phase plan with `write-plan` after the current phase closes, then stop at its approval gate. In yolo mode, write and auto-approve it and continue.
 
 ## Status rules
 
 | Affected phase status | Action |
 |---|---|
 | `planned` or `draft` | Update the plan and keep it unapproved. |
-| `ready` | Run `reopen <plan-dir> P<n>`, update the plan, then re-request approval. |
-| `in_progress` | Stop implementation, record the change, update the plan, and report the interruption to the user before continuing. |
+| `ready` | Run `reopen <plan-dir> P<n>`, update the plan, then re-request approval; in yolo mode, revalidate and run `approve --yolo`. |
+| `in_progress` | Stop implementation, record the change, update the plan, and report the interruption to the user before continuing. In yolo mode, a plan-local change may continue after the amendment; a contract change stops the run. |
 | `done` | Do not rewrite its closeout evidence. Prefer a new phase or an added step. If its result is invalid, set the master row to `needs_replan`, keep the closeout, and write a new plan version for the corrective work. |
 | `blocked` | Update the blocker or plan only after the blocking condition is resolved or the user changes direction. |
 
@@ -84,4 +84,4 @@ Before re-presenting:
 - Every affected phase names the new master version.
 - Every ledger row has `Affects`, an action, and a status.
 - `progressive_plan.py check --strict` passes.
-- The current phase is still `draft` and unapproved until the user says otherwise.
+- The current phase is still `draft` and unapproved until the user says otherwise, unless the master records `Mode: yolo`; then auto-approve it with `--yolo`.
