@@ -11,10 +11,13 @@
 - Owner: <coordinator agent or user>
 - Plan directory: `{{PLAN_DIR}}`
 - Branch: `{{BRANCH}}`
+- History: per-phase
 
 `Status` is one of `draft`, `active`, `complete`, or `blocked`. `approve` sets `active`; `close` sets `complete` when every phase is done.
 
 `Mode` is `standard` or `yolo`. In `yolo` mode the user authorizes the coordinator to approve and implement every phase without further review; it still never merges, deploys, or marks the PR ready. `Mode authorized by` records `<user>, <date>` and is required for `yolo`.
+
+`History` is `per-phase` or `keep`. `per-phase` lets the condense gate rebuild the branch as one commit per phase before review. `keep` disables condensing and preserves every planning and closeout commit.
 
 ## 1. Objective
 

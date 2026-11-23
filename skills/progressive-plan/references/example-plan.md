@@ -18,6 +18,7 @@ This is a filled example, not a template. It shows the minimum useful content fo
 - Owner: coordinator
 - Plan directory: `docs/plans/add-dry-run`
 - Branch: `plan/add-dry-run`
+- History: per-phase
 
 ## 1. Objective
 

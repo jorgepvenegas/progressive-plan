@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "skills" / "progressive-plan" / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import planlib  # noqa: E402
-from fixtures import init_git, make_valid_plan, valid_plan  # noqa: E402
+from fixtures import init_git, make_valid_plan, valid_master, valid_plan  # noqa: E402
 
 
 def run_cli(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -549,6 +549,18 @@ class StructureTests(PlanTestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unknown ledger row L9", result.stdout + result.stderr)
 
+    def test_invalid_history_is_error(self) -> None:
+        plan_dir = make_valid_plan(self.tmp, "ready")
+        master = self.master(plan_dir).replace(
+            "- Branch: `plan/valid-plan`",
+            "- Branch: `plan/valid-plan`\n- History: everything",
+            1,
+        )
+        (plan_dir / "master.md").write_text(master, encoding="utf-8")
+        result = run_cli(self.tmp, "check", str(plan_dir))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("History must be", result.stdout + result.stderr)
+
     def test_invalid_ledger_row_is_error(self) -> None:
         plan_dir = self.new_plan()
         master = self.master(plan_dir)
@@ -763,6 +775,184 @@ class ArchiveTests(PlanTestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("already exists", result.stdout + result.stderr)
         self.assertTrue(plan_dir.exists())
+
+
+class CondenseTests(PlanTestCase):
+    def _commit(self, message: str) -> str:
+        subprocess.run(["git", "add", "-A"], cwd=self.tmp, check=True)
+        subprocess.run(["git", "commit", "-qm", message], cwd=self.tmp, check=True)
+        return subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=self.tmp,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).stdout.strip()
+
+    def _done_phase(self) -> tuple[Path, str]:
+        plan_dir = make_valid_plan(self.tmp, "in_progress")
+        self._commit("plan: P1 Build")
+        (self.tmp / "app.py").write_text("ok\n", encoding="utf-8")
+        phase = self._commit("P1: Build")
+        master = valid_master(plan_dir, "done", dod_checked=True).replace(
+            "- Status: active", "- Status: complete", 1
+        )
+        (plan_dir / "master.md").write_text(master, encoding="utf-8")
+        (plan_dir / "phases" / "01-build" / "plan.md").write_text(
+            valid_plan("done", commit_hash=phase), encoding="utf-8"
+        )
+        self._commit("P1: record closeout")
+        return plan_dir, phase
+
+    def _log(self, branch: str, base: str) -> list[str]:
+        return subprocess.run(
+            ["git", "log", "--reverse", "--format=%s", branch, "--not", base],
+            cwd=self.tmp,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).stdout.splitlines()
+
+    def test_condense_drops_plans_and_rebuilds_one_commit(self) -> None:
+        base = init_git(self.tmp)
+        plan_dir, _phase = self._done_phase()
+        result = run_cli(
+            self.tmp,
+            "condense",
+            str(plan_dir),
+            "--base",
+            base,
+            "--branch",
+            "condensed",
+            "--plans",
+            "drop",
+            "--json",
+        )
+        self.assert_ok(result)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["new_count"], 1)
+        self.assertEqual(self._log("condensed", base), ["P1: Build"])
+        self.assertEqual(
+            subprocess.run(
+                ["git", "show", "condensed:app.py"],
+                cwd=self.tmp,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            ).stdout,
+            "ok\n",
+        )
+        tree = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", "condensed"],
+            cwd=self.tmp,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).stdout
+        self.assertNotIn("plans/valid-plan", tree)
+        diff = subprocess.run(
+            ["git", "diff", "--quiet", "condensed", "HEAD", "--", ".", ":(exclude)plans"],
+            cwd=self.tmp,
+        )
+        self.assertEqual(diff.returncode, 0)
+
+    def test_condense_keeps_plans_and_rewrites_hashes(self) -> None:
+        base = init_git(self.tmp)
+        plan_dir, phase = self._done_phase()
+        result = run_cli(
+            self.tmp,
+            "condense",
+            str(plan_dir),
+            "--base",
+            base,
+            "--branch",
+            "condensed",
+            "--plans",
+            "keep",
+            "--json",
+        )
+        self.assert_ok(result)
+        data = json.loads(result.stdout)
+        phase_commit = next(
+            item["new"] for item in data["commits"] if item["kind"] == "phase"
+        )
+        plan_text = subprocess.run(
+            [
+                "git",
+                "show",
+                "condensed:plans/valid-plan/phases/01-build/plan.md",
+            ],
+            cwd=self.tmp,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).stdout
+        new_short = subprocess.run(
+            ["git", "rev-parse", "--short", phase_commit],
+            cwd=self.tmp,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        ).stdout.strip()
+        self.assertIn(f"- Commit: {new_short}", plan_text)
+        self.assertNotIn(f"- Commit: {phase}", plan_text)
+        diff = subprocess.run(
+            ["git", "diff", "--quiet", "condensed", "HEAD", "--", ".", ":(exclude)plans"],
+            cwd=self.tmp,
+        )
+        self.assertEqual(diff.returncode, 0)
+
+    def test_condense_keeps_a_mechanical_commit(self) -> None:
+        base = init_git(self.tmp)
+        (self.tmp / "format.txt").write_text("formatted\n", encoding="utf-8")
+        format_commit = self._commit("style: format")
+        plan_dir, _phase = self._done_phase()
+        result = run_cli(
+            self.tmp,
+            "condense",
+            str(plan_dir),
+            "--base",
+            base,
+            "--branch",
+            "condensed",
+            "--plans",
+            "drop",
+            "--keep",
+            format_commit,
+        )
+        self.assert_ok(result)
+        self.assertEqual(
+            self._log("condensed", base), ["style: format", "P1: Build"]
+        )
+
+    def test_condense_refuses_history_keep(self) -> None:
+        init_git(self.tmp)
+        plan_dir, _phase = self._done_phase()
+        master = (plan_dir / "master.md").read_text(encoding="utf-8")
+        master = master.replace(
+            "- Branch: `plan/valid-plan`",
+            "- Branch: `plan/valid-plan`\n- History: keep",
+            1,
+        )
+        (plan_dir / "master.md").write_text(master, encoding="utf-8")
+        self._commit("plan: history")
+        result = run_cli(self.tmp, "condense", str(plan_dir))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("History: keep", result.stdout + result.stderr)
+
+    def test_condense_refuses_dirty_tree(self) -> None:
+        init_git(self.tmp)
+        plan_dir, _phase = self._done_phase()
+        (self.tmp / "app.py").write_text("dirty\n", encoding="utf-8")
+        result = run_cli(self.tmp, "condense", str(plan_dir))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("working tree is not clean", result.stdout + result.stderr)
 
 
 class ResumeAndReportTests(PlanTestCase):

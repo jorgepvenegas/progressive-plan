@@ -69,7 +69,20 @@ Run the closeout at the end of every implementation session, and always before a
 - Run `check` after recording. A `done` phase without a real recorded commit fails.
 - Close the phase with `close <plan-dir> P<n> --by <worker>`. `close` sets the phase and master to `done`, writes the closeout history, and validates the result. It is the only transition that should mark a phase done.
 - Commit the metadata change separately as `P<n>: record closeout`; never amend the phase commit.
-- If a draft PR is open for `plan/<slug>`, push every commit as it is created with `git push`. This includes plan commits, phase commits, approval and closeout metadata, and the final plan-file disposition commit. Do not batch pushes until the end. A commit that stays local is not reviewable on GitHub.
+- If a draft PR is open for `plan/<slug>`, push at phase boundaries. Push a plan commit before its approval request, and push the phase commit with its closeout metadata when the phase closes. Do not push each approval, in-progress, note, or correction commit. A commit that stays local is not reviewable on GitHub.
+- A failed push is reported, not repaired by rewriting history.
+
+## History condensation gate
+
+Run this gate after the final phase is `done`, the definition-of-done sweep passes, and the working tree is clean. It runs before the plan-file disposition and before review starts.
+
+- `History` is `per-phase` (default) or `keep`. `keep` disables the gate; the full planning trail is preserved.
+- Run `condense <plan-dir> --plans drop` when the plan files will be removed, or `--plans keep` when they will be archived or kept. Add `--keep <hash>` for a mechanical commit that must stay separate, such as a format baseline.
+- The command writes a new branch and verifies that the product tree is unchanged. It rewrites recorded phase hashes when plans are kept.
+- Inspect the new branch, run `check` when plans are kept, and run the plan's verification commands.
+- Keep the old tip with `git tag <plan-branch>-trail <old-tip>`, move `plan/<slug>` to the condensed tip, switch back to it, then `git push --force-with-lease`. The condensed branch is a staging ref; the PR keeps tracking `plan/<slug>`.
+- Never condense after a human review has started. Use the repository's squash merge or leave the history as it is.
+- In yolo mode, condensing is the only allowed history rewrite. It stays on the draft branch and still never marks the PR ready.
 
 ## Discovery propagation
 
@@ -95,11 +108,11 @@ Run the closeout at the end of every implementation session, and always before a
 
 ## Completed-plan file gate
 
-After the final phase is `done` and every definition-of-done item is met, ask whether to keep the plan files or remove them from the PR.
+After the final phase is `done` and every definition-of-done item is met, ask whether to keep the plan files or remove them from the PR. Ask before condensing, because the condense command reads them.
 
-- **Remove:** `git rm -r <plan-dir>`, commit `plan: remove completed plan files`, and push when a draft PR is open. The PR body must not point at the removed directory.
-- **Keep:** ask whether to leave the files at `<plan-dir>` or archive them under `<plans-root>/archive/<slug>/`. Recommend archive so a new master plan can use the same slug. Run `archive <plan-dir>`, commit `plan: archive <slug>`, and push when a draft PR is open.
+- **Remove:** condense with `--plans drop`. The condensed history omits the plan directory, so do not add a separate `git rm` commit. If condensing is skipped (`History: keep`), run `git rm -r <plan-dir>` and commit `plan: remove completed plan files`. The PR body must not point at the removed directory.
+- **Keep:** condense with `--plans keep`, then ask whether to leave the files at `<plan-dir>` or archive them under `<plans-root>/archive/<slug>/`. Recommend archive so a new master plan can use the same slug. Run `archive <plan-dir>`, commit `plan: archive <slug>`, and push when a draft PR is open.
 - If the user keeps the files in place, say that the slug stays occupied.
 - After the decision, update the PR title to a conventional-commit title and rewrite the body with the issue, what was done, the decisions, and verification.
 - Record the decision in the final report.
-- In yolo mode, do not ask: archive the plan files, update the PR title and body, and leave the PR as a draft. Remove the plan files instead only when the user asked for a product-only PR.
+- In yolo mode, do not ask: condense with `--plans keep`, archive the plan files, update the PR title and body, and leave the PR as a draft. Condense with `--plans drop` instead only when the user asked for a product-only PR.
