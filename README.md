@@ -52,7 +52,7 @@ flowchart TD
 
 `progressive-plan` owns the loop: intake, sizing, the master plan, just-in-time phase plans, the approval gate, delegation, closeout, and the commit gate. `refine-phase` handles a rejected phase plan and returns it to the approval gate. `plan-resume` re-enters the loop for an existing plan by reconstructing state from `master.md`, the phase plan, and git history. Implementation does not start until the user explicitly approves the current phase, unless the master records yolo mode. Each generated `master.md` also carries a `Goal flow` section: a small Mermaid diagram of the user-visible outcome for the person approving phases. Existing masters are upgraded by `plan-resume` before it continues. Each master records the project's real format, lint, type-check, and test commands, and a phase cannot be `done` while its code standards check is open.
 
-When a plan is ready for review, the skill asks whether to open a draft PR so the user can read it on GitHub. If one is open, every plan, phase, and closeout commit is pushed as it is created. When the master plan is complete, the skill asks whether to keep the plan files or remove them from the PR. Keeping them archives the plan under `docs/plans/archive/<slug>/`, so a new master plan can use the active path again; removing them leaves only the product changes in the PR. After that decision, the skill updates the PR title to a conventional-commit title (`feat:`, `fix:`, and so on) and rewrites the body with the issue, what was done, the decisions, and verification.
+When a plan is ready for review, the skill asks whether to open a draft PR so the user can read it on GitHub. If one is open, the skill pushes at phase boundaries: a plan before its approval request, and the phase commit with its closeout metadata when the phase closes. When the master plan is complete, it asks whether to keep the plan files or remove them from the PR. Keeping them archives the plan under `docs/plans/archive/<slug>/`, so a new master plan can use the active path again; removing them leaves only the product changes in the PR. Before review starts, the condense gate rebuilds the branch as one commit per phase and verifies the product tree is unchanged. After that decision, the skill updates the PR title to a conventional-commit title (`feat:`, `fix:`, and so on) and rewrites the body with the issue, what was done, the decisions, and verification.
 
 `add-phase --outline` adds a `planned` row without a plan; `write-plan` creates the plan just in time. `approve` validates the plan content before recording approval. It refuses a plan that still contains template placeholders, has no steps or acceptance criteria, or omits an affecting discovery. After review, `record-commit` records the phase commit and implementer, and `close` is the only transition that marks a phase done. `close` requires an `addressed` closeout, a `met` row for every criterion and claimed definition-of-done item, a checked code-standards list, an implementer, and a real commit. `check --strict` turns warnings into errors for CI.
 
@@ -67,13 +67,13 @@ python3 skills/progressive-plan/scripts/progressive_plan.py new "Overnight impor
   --mode yolo --authorized-by "Jorge"
 ```
 
-The master records `Mode: yolo` and `Mode authorized by: <user>, <date>`. `check` refuses a yolo master without that authorization, and `approve --yolo` refuses a master that is not in yolo mode. Each phase is still planned, checked, delegated to one worker, reviewed, closed out, committed, and pushed. The difference is that phase approval uses the master authorization instead of waiting for the user:
+The master records `Mode: yolo` and `Mode authorized by: <user>, <date>`. `check` refuses a yolo master without that authorization, and `approve --yolo` refuses a master that is not in yolo mode. Each phase is still planned, checked, delegated to one worker, reviewed, closed out, and committed. The difference is that phase approval uses the master authorization instead of waiting for the user:
 
 ```bash
 python3 skills/progressive-plan/scripts/progressive_plan.py approve docs/plans/<slug> P1 --by "Jorge" --yolo
 ```
 
-The coordinator opens the draft PR before implementation and pushes every commit. At the end it archives the plan files, updates the PR title and body, and leaves the PR as a draft. It never merges, deploys, releases, or marks the PR ready. It stops and reports on a blocked phase, a scope or contract change, a product decision, failing verification that cannot be fixed honestly, a repeated worker failure, missing credentials, or an exhausted budget.
+The coordinator opens the draft PR before implementation and pushes at phase boundaries. At the end it condenses the draft branch to one commit per phase, archives the plan files, updates the PR title and body, and leaves the PR as a draft. It never merges, deploys, releases, or marks the PR ready. It stops and reports on a blocked phase, a scope or contract change, a product decision, failing verification that cannot be fixed honestly, a repeated worker failure, missing credentials, or an exhausted budget.
 
 ## Commands
 
@@ -100,6 +100,7 @@ python3 skills/progressive-plan/scripts/progressive_plan.py discoveries docs/pla
 python3 skills/progressive-plan/scripts/progressive_plan.py scope docs/plans/<slug> P1
 python3 skills/progressive-plan/scripts/progressive_plan.py report docs/plans/<slug>
 python3 skills/progressive-plan/scripts/progressive_plan.py archive docs/plans/<slug>
+python3 skills/progressive-plan/scripts/progressive_plan.py condense docs/plans/<slug> --plans keep
 python3 skills/progressive-plan/scripts/progressive_plan.py check docs/plans/<slug> --strict
 python3 skills/progressive-plan/scripts/progressive_plan.py status docs/plans/<slug> --json
 ```
@@ -176,7 +177,7 @@ The scripts use only the Python standard library. Run the tests from the reposit
 python3 -m unittest discover -s tests -v
 ```
 
-The tests scaffold plans in temporary directories and exercise approval, outline phases, malformed rows, dependency cycles, discovery propagation, closeout coverage, commit recording, branch reconciliation, and scope checks.
+The tests scaffold plans in temporary directories and exercise approval, outline phases, malformed rows, dependency cycles, discovery propagation, closeout coverage, commit recording, history condensation, branch reconciliation, and scope checks.
 
 CI runs the same command on every push and pull request.
 

@@ -148,7 +148,7 @@ Only after the user explicitly approves:
    - the draft PR URL or `none`,
    - the instruction to implement, verify, write the phase closeout, commit on the plan branch, push the phase commit when a draft PR is open, and report the hash.
 6. Keep the handle. Do not implement the phase in the coordinator.
-7. Report the handoff, then follow the normal `progressive-plan` closeout loop: review the worker's files, tests, closeout, and commit; run `scope`; record the commit with `record-commit --by`; close the phase with `close`; push every commit when a draft PR is open. When the final phase is done and all D items are met, run `report`, offer a draft PR if none exists, ask whether to keep or remove the plan files (archive them when kept), and update the PR title and body now that the plan is implemented. Use a conventional-commit title and cover the issue, what was done, the decisions, and verification. In yolo mode, archive the plan files, update the PR, and leave it as a draft without asking.
+7. Report the handoff, then follow the normal `progressive-plan` closeout loop: review the worker's files, tests, closeout, and commit; run `scope`; record the commit with `record-commit --by`; close the phase with `close`; push at phase boundaries when a draft PR is open. When the final phase is done and all D items are met, run `report`, offer a draft PR if none exists, ask whether to keep or remove the plan files, condense the history with `condense --plans keep|drop`, archive them when kept, and update the PR title and body now that the plan is implemented. Use a conventional-commit title and cover the issue, what was done, the decisions, and verification. In yolo mode, archive the plan files, update the PR, and leave it as a draft without asking.
 
 If the user pauses or rejects without actionable feedback, keep the phase `draft`, record the round, and ask one focused question. If the user abandons the phase, set it `blocked` and name the reason.
 
@@ -163,7 +163,7 @@ If the user pauses or rejects without actionable feedback, keep the phase `draft
 - **No version inflation.** Bump versions for semantic changes, not typos.
 - **No weakened quality gates.** Do not drop standards checks, tests, or acceptance criteria to make a plan approvable.
 - **No stale review copy.** Commit and push the refined plan before presenting it, or the draft PR shows the previous version.
-- **No unpushed draft PR.** Push every commit while the draft PR is open.
+- **No unpushed draft PR.** Push at phase boundaries while the draft PR is open; do not push every bookkeeping commit. The condense gate runs before review.
 
 The shared approval, delegation, closeout, commit, and PR gates are in `../progressive-plan/references/gates.md`.
 

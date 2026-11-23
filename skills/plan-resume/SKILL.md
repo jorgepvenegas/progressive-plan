@@ -104,12 +104,12 @@ Once the state is reconciled, follow `../progressive-plan/references/gates.md`. 
 - Use `reopen` when a ready or done phase needs plan changes; do not edit approval fields by hand.
 - Use `record-commit` and `close`; do not mark a phase done by editing the status fields.
 - Run `scope <plan-dir> <phase>` before accepting a worker's commit.
-- If a draft PR is open, push every commit as it is created, including plan, approval, and closeout metadata commits.
+- If a draft PR is open, push at phase boundaries: a plan before its approval request, and the phase commit with its closeout metadata when the phase closes. Do not push every bookkeeping commit.
 - Before presenting a plan for approval, commit it with a `plan:` subject and push it when a draft PR is open. If no draft PR exists and the master records no decline, offer one first (see `../progressive-plan/references/gates.md`).
-- When the master is complete, follow the completed-plan file gate: ask whether to keep or remove the plan files, archive them under `<plans-root>/archive/<slug>/` when kept, push the disposition commit, and update the PR title and body for the implemented outcome. The title uses a conventional-commit prefix; the body covers the issue, what was done, the decisions, and verification. In yolo mode, archive them, update the PR, and leave it as a draft without asking.
+- When the master is complete, follow the completed-plan file gate: ask whether to keep or remove the plan files, condense the history with `condense --plans keep|drop`, archive them under `<plans-root>/archive/<slug>/` when kept, push the disposition commit, and update the PR title and body for the implemented outcome. The title uses a conventional-commit prefix; the body covers the issue, what was done, the decisions, and verification. In yolo mode, archive them, update the PR, and leave it as a draft without asking.
 - If a closeout reports a `new-phase` discovery, verify the master phase map has that phase as `planned` and that the current phase did not implement it.
 - Do not start the next phase because it looks easy. Close the current phase and stop at the next approval gate, unless the master records `Mode: yolo`.
-- In yolo mode, stop only at the Yolo mode stop conditions in `../progressive-plan/SKILL.md`. Push every commit, keep the PR a draft, and archive the plan files at the end without asking.
+- In yolo mode, stop only at the Yolo mode stop conditions in `../progressive-plan/SKILL.md`. Push phase commits, condense the draft branch at the end, keep the PR a draft, and archive the plan files without asking.
 
 ## 5. Report the resume state
 

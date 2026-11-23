@@ -32,6 +32,7 @@ VALID_TYPES = {
 VALID_LEDGER_STATUSES = {"open", "applied", "superseded", "wontfix"}
 VALID_SIZES = {"small", "medium", "large"}
 VALID_MODES = {"standard", "yolo"}
+VALID_HISTORY = {"per-phase", "keep"}
 
 # master status -> phase plan status
 PHASE_STATUS_MAP = {
@@ -151,6 +152,10 @@ def bump_int_field(text: str, name: str, amount: int = 1) -> str:
 
 def master_mode(text: str) -> str:
     return (field(text, "Mode") or "standard").strip().lower()
+
+
+def master_history(text: str) -> str:
+    return (field(text, "History") or "per-phase").strip().lower()
 
 
 def master_version(text: str) -> int | None:
@@ -584,6 +589,13 @@ def _validate_master_header(
             errors.append(
                 "master: Mode is yolo but '- Mode authorized by' is missing or pending"
             )
+
+    history = field(master, "History")
+    if history is not None and history.strip().lower() not in VALID_HISTORY:
+        errors.append(
+            f"master: History must be one of {', '.join(sorted(VALID_HISTORY))}; "
+            f"found '{history}'"
+        )
 
     goal_flow = section(master, "Goal flow")
     if goal_flow and "```mermaid" not in goal_flow:
@@ -1335,14 +1347,19 @@ def build_status(plan_dir: Path, phase_override: str | None = None) -> dict[str,
     elif not rows:
         next_action = "Add the first phase to the master phase map."
     elif all(row["status"] == "done" for row in rows):
+        history_step = (
+            "condense the branch with the condense gate, "
+            if master_history(master) == "per-phase"
+            else ""
+        )
         next_action = (
             "All phases are done. Run the final definition-of-done sweep, "
             + (
-                "then archive the plan files, update the PR title and body, "
-                "and leave the draft PR for review."
+                f"then {history_step}archive the plan files, update the PR title "
+                "and body, and leave the draft PR for review."
                 if yolo
-                else "then offer a draft PR and ask whether to keep or remove "
-                "the plan files."
+                else "then offer a draft PR, ask whether to keep or remove "
+                f"the plan files, {history_step}and update the PR title and body."
             )
         )
     elif current_row is not None:

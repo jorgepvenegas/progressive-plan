@@ -16,6 +16,8 @@ Commands:
     scope <plan-dir> <phase> [--base REF] [--strict] [--json]
     report <plan-dir> [--json]
     archive <plan-dir> [--dest ARCHIVE_ROOT]
+    condense <plan-dir> [--base REF] [--branch NAME] [--plans keep|drop]
+        [--keep HASH]... [--tag NAME] [--dry-run] [--force] [--json]
     check <plan-dir> [--strict] [--json]
     status <plan-dir> [--json]
 """
@@ -24,9 +26,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
+import subprocess
 import sys
+import tempfile
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -52,11 +57,13 @@ from planlib import (
     fail,
     field,
     git,
+    git_ok,
     git_root,
     identifier_number,
     invalid_phase_refs,
     is_pending,
     ledger_rows,
+    master_history,
     master_mode,
     master_version,
     phase_plan_path,
@@ -729,6 +736,455 @@ def cmd_archive(args: argparse.Namespace) -> None:
     print("next: commit the move and push if a draft PR is open")
 
 
+def _git_checked(
+    repo: Path,
+    *args: str,
+    env: dict[str, str] | None = None,
+    input_text: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        ["git", "-C", str(repo), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        input=input_text,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        fail(f"git {' '.join(args)} failed: {detail}")
+    return result
+
+
+def _resolve_commit(repo: Path, value: str, label: str) -> str:
+    full = git(repo, "rev-parse", "--verify", f"{value}^{{commit}}")
+    if not full:
+        fail(f"{label}: unknown commit {value!r}")
+    return full
+
+
+def _condense_base(repo: Path, explicit: str | None) -> str:
+    if explicit:
+        base = _resolve_commit(repo, explicit, "--base")
+    else:
+        candidates: list[str] = []
+        origin_head = git(repo, "symbolic-ref", "refs/remotes/origin/HEAD")
+        if origin_head:
+            candidates.append(origin_head)
+        candidates.extend(
+            [
+                "refs/remotes/origin/main",
+                "refs/remotes/origin/master",
+                "refs/heads/main",
+                "refs/heads/master",
+            ]
+        )
+        base = ""
+        for ref in candidates:
+            if not git_ok(repo, "rev-parse", "--verify", ref):
+                continue
+            merge_base = git(repo, "merge-base", "HEAD", ref)
+            if merge_base:
+                base = merge_base
+                break
+        if not base:
+            fail("could not determine the plan base; pass --base <commit>")
+    if not commit_is_ancestor(repo, base, "HEAD"):
+        fail(f"base {base[:12]} is not an ancestor of HEAD")
+    head = _git_checked(repo, "rev-parse", "HEAD").stdout.strip()
+    if base == head:
+        fail("base equals HEAD; there is nothing to condense")
+    return base
+
+
+def _tree_without_plans(
+    repo: Path, commit: str, plan_rel: str | None, index_file: Path
+) -> str:
+    env = os.environ.copy()
+    env["GIT_INDEX_FILE"] = str(index_file)
+    _git_checked(repo, "read-tree", f"{commit}^{{tree}}", env=env)
+    if plan_rel:
+        _git_checked(
+            repo,
+            "rm",
+            "-r",
+            "-f",
+            "--cached",
+            "-q",
+            "--ignore-unmatch",
+            "--",
+            plan_rel,
+            env=env,
+        )
+    return _git_checked(repo, "write-tree", env=env).stdout.strip()
+
+
+def _commit_identity(repo: Path, commit: str) -> tuple[str, str, str]:
+    output = _git_checked(
+        repo, "show", "-s", "--format=%an%n%ae%n%aI", commit
+    ).stdout.splitlines()
+    if len(output) < 3:
+        fail(f"could not read author identity from {commit}")
+    return output[0], output[1], output[2]
+
+
+def _write_condensed_commit(
+    repo: Path, tree: str, parent: str, message: str, source: str
+) -> str:
+    name, email, when = _commit_identity(repo, source)
+    env = os.environ.copy()
+    env.update(
+        {
+            "GIT_AUTHOR_NAME": name,
+            "GIT_AUTHOR_EMAIL": email,
+            "GIT_AUTHOR_DATE": when,
+            "GIT_COMMITTER_NAME": name,
+            "GIT_COMMITTER_EMAIL": email,
+            "GIT_COMMITTER_DATE": when,
+        }
+    )
+    return _git_checked(
+        repo,
+        "commit-tree",
+        tree,
+        "-p",
+        parent,
+        env=env,
+        input_text=message + "\n",
+    ).stdout.strip()
+
+
+def _condense_subject(repo: Path, entry: dict[str, Any]) -> str:
+    if entry["kind"] == "phase":
+        row = entry["phase"]
+        name = str(row.get("name") or "").strip()
+        fallback = commit_subject(repo, entry["commit"]) or entry["commit"][:7]
+        return f"{row['id']}: {name or fallback}"
+    if entry["kind"] == "keep":
+        return commit_subject(repo, entry["commit"]) or "checkpoint"
+    return "plan: record final state"
+
+
+def _rewrite_plan_hashes(
+    repo: Path,
+    tip: str,
+    plan_rel: str,
+    mappings: list[tuple[str, str, str]],
+    index_file: Path,
+    source: str,
+) -> str | None:
+    replacements: list[tuple[str, str]] = []
+    for recorded, old_full, new_full in mappings:
+        new_short = git(repo, "rev-parse", "--short", new_full) or new_full[:7]
+        for old in {recorded, old_full}:
+            if old and old != new_short:
+                replacements.append((old, new_short))
+    if not replacements:
+        return None
+    replacements.sort(key=lambda item: len(item[0]), reverse=True)
+
+    env = os.environ.copy()
+    env["GIT_INDEX_FILE"] = str(index_file)
+    _git_checked(repo, "read-tree", f"{tip}^{{tree}}", env=env)
+    paths = _git_checked(
+        repo, "ls-tree", "-r", "--name-only", tip, "--", plan_rel
+    ).stdout.splitlines()
+
+    changed = False
+    for path in paths:
+        original = _git_checked(repo, "show", f"{tip}:{path}").stdout
+        updated = original
+        for old, new in replacements:
+            updated = re.sub(
+                rf"(?<![0-9a-fA-F]){re.escape(old)}(?![0-9a-fA-F])",
+                new,
+                updated,
+            )
+        if updated == original:
+            continue
+        blob = _git_checked(repo, "hash-object", "-w", "--stdin", input_text=updated)
+        _git_checked(
+            repo,
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            "100644",
+            blob.stdout.strip(),
+            path,
+            env=env,
+        )
+        changed = True
+    if not changed:
+        return None
+    tree = _git_checked(repo, "write-tree", env=env).stdout.strip()
+    return _write_condensed_commit(
+        repo, tree, tip, "plan: record condensed commits", source
+    )
+
+
+def cmd_condense(args: argparse.Namespace) -> None:
+    plan_dir = Path(args.plan_dir)
+    master_file = plan_dir / "master.md"
+    if not master_file.exists():
+        fail(f"{master_file} does not exist")
+    master = read_text(master_file)
+    if master_history(master) == "keep" and not args.force:
+        fail(
+            "master records History: keep; condense would discard the audit trail. "
+            "Pass --force only after deciding to rewrite the branch."
+        )
+
+    rows = phase_rows(master)
+    if not rows:
+        fail("master has no phases to condense")
+    malformed = [row["id"] for row in rows if row.get("malformed")]
+    if malformed:
+        fail(f"master phase map is malformed for {', '.join(malformed)}")
+    pending = [
+        row["id"] for row in rows if row["status"] not in {"done", "superseded"}
+    ]
+    if pending:
+        fail(
+            "condense requires every phase to be done or superseded; "
+            f"pending: {', '.join(pending)}"
+        )
+
+    repo = git_root(plan_dir)
+    if repo is None:
+        fail("condense requires a git repository")
+    if working_tree(plan_dir):
+        fail("working tree is not clean; commit or stash changes before condensing")
+    try:
+        plan_rel = plan_dir.resolve().relative_to(repo.resolve()).as_posix()
+    except ValueError:
+        fail("plan directory is outside the repository")
+
+    current = current_branch(plan_dir)
+    recorded_branch = field(master, "Branch")
+    if (
+        recorded_branch
+        and current
+        and current != "HEAD"
+        and current != recorded_branch
+    ):
+        print(
+            f"warning: master records branch {recorded_branch}; "
+            f"current branch is {current}",
+            file=sys.stderr,
+        )
+    default_branch = (
+        f"{current}-condensed" if current and current != "HEAD" else "plan-condensed"
+    )
+    branch = args.branch or default_branch
+    if branch == current:
+        fail("the condensed branch must differ from the current branch")
+    if git_ok(repo, "rev-parse", "--verify", f"refs/heads/{branch}") and not args.force:
+        fail(f"branch {branch} already exists; pass --force to replace it")
+    if (
+        args.tag
+        and git_ok(repo, "rev-parse", "--verify", f"refs/tags/{args.tag}")
+        and not args.force
+    ):
+        fail(f"tag {args.tag} already exists; pass --force to replace it")
+
+    base = _condense_base(repo, args.base)
+    head = _git_checked(repo, "rev-parse", "HEAD").stdout.strip()
+    rev_list = _git_checked(
+        repo, "rev-list", "--reverse", f"{base}..HEAD"
+    ).stdout.split()
+    position = {commit: index for index, commit in enumerate(rev_list)}
+
+    entries: list[dict[str, Any]] = []
+    mappings: list[tuple[str, str]] = []
+    for row in rows:
+        if row["status"] == "superseded":
+            continue
+        plan_file = phase_plan_path(plan_dir, row)
+        if not plan_file.exists():
+            fail(f"{row['id']}: phase plan {plan_file} does not exist")
+        recorded = field(read_text(plan_file), "Commit")
+        if is_pending(recorded):
+            fail(f"{row['id']}: no recorded commit; run record-commit first")
+        full = _resolve_commit(repo, recorded or "", row["id"])
+        if full not in position:
+            fail(f"{row['id']}: commit {recorded} is not between base and HEAD")
+        entries.append(
+            {"commit": full, "kind": "phase", "phase": row, "recorded": recorded}
+        )
+        mappings.append((recorded or "", full))
+
+    for value in args.keep:
+        full = _resolve_commit(repo, value, "--keep")
+        if full not in position:
+            fail(f"--keep {value}: commit is not between base and HEAD")
+        entries.append({"commit": full, "kind": "keep", "recorded": value})
+
+    entries.append({"commit": head, "kind": "final"})
+    priority = {"phase": 0, "keep": 1, "final": 2}
+    by_commit: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        existing = by_commit.get(entry["commit"])
+        if existing is None or priority[entry["kind"]] < priority[existing["kind"]]:
+            by_commit[entry["commit"]] = entry
+    ordered = sorted(by_commit.values(), key=lambda item: position[item["commit"]])
+
+    drop_plans = args.plans == "drop"
+    with tempfile.TemporaryDirectory(prefix="pplan-condense-") as tmp:
+        index_file = Path(tmp) / "index"
+        expected_tree = _tree_without_plans(
+            repo, head, plan_rel if drop_plans else None, index_file
+        )
+        parent = base
+        previous_tree = _tree_without_plans(
+            repo, base, plan_rel if drop_plans else None, index_file
+        )
+        new_commits: list[dict[str, Any]] = []
+        new_tip: str | None = None
+        hash_rewrite: str | None = None
+        phase_new: dict[str, str] = {}
+        for entry in ordered:
+            tree = _tree_without_plans(
+                repo, entry["commit"], plan_rel if drop_plans else None, index_file
+            )
+            if tree == previous_tree and entry["kind"] != "phase":
+                continue
+            subject = _condense_subject(repo, entry)
+            item = {
+                "source": entry["commit"],
+                "kind": entry["kind"],
+                "subject": subject,
+                "phase": entry.get("phase", {}).get("id"),
+            }
+            if not args.dry_run:
+                new = _write_condensed_commit(
+                    repo, tree, parent, subject, entry["commit"]
+                )
+                item["new"] = new
+                parent = new
+                new_tip = new
+                if entry["kind"] == "phase":
+                    phase_new[entry["commit"]] = new
+            else:
+                item["new"] = None
+            new_commits.append(item)
+            previous_tree = tree
+
+        if previous_tree != expected_tree:
+            fail(
+                "condensed history does not reproduce the final tree; "
+                "the plan commits are stale or out of order"
+            )
+
+        if not new_commits:
+            fail("nothing to condense; the branch already has one product state")
+
+        if not args.dry_run:
+            if not drop_plans:
+                replacement_mappings = [
+                    (recorded, old, phase_new[old])
+                    for recorded, old in mappings
+                    if old in phase_new
+                ]
+                hash_rewrite = _rewrite_plan_hashes(
+                    repo,
+                    parent,
+                    plan_rel,
+                    replacement_mappings,
+                    index_file,
+                    head,
+                )
+                if hash_rewrite:
+                    new_tip = hash_rewrite
+                    new_commits.append(
+                        {
+                            "source": head,
+                            "kind": "plan",
+                            "subject": "plan: record condensed commits",
+                            "phase": None,
+                            "new": hash_rewrite,
+                        }
+                    )
+            if new_tip is None:
+                fail("condense produced no commits")
+            _git_checked(repo, "branch", "-f", branch, new_tip)
+            if args.tag:
+                if git_ok(repo, "rev-parse", "--verify", f"refs/tags/{args.tag}"):
+                    _git_checked(repo, "tag", "-f", args.tag, head)
+                else:
+                    _git_checked(repo, "tag", args.tag, head)
+        else:
+            new_tip = None
+            if not drop_plans and any(
+                item["kind"] == "phase" for item in new_commits
+            ):
+                new_commits.append(
+                    {
+                        "source": head,
+                        "kind": "plan",
+                        "subject": "plan: record condensed commits",
+                        "phase": None,
+                        "new": None,
+                    }
+                )
+
+    payload = {
+        "branch": branch,
+        "current_branch": current,
+        "base": base,
+        "old_tip": head,
+        "new_tip": new_tip,
+        "old_count": len(rev_list),
+        "new_count": len(new_commits),
+        "plans": args.plans,
+        "tag": args.tag,
+        "dry_run": args.dry_run,
+        "commits": new_commits,
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    verb = "would condense" if args.dry_run else "condensed"
+    print(f"{verb} {len(rev_list)} commits to {len(new_commits)} on {branch}")
+    print(f"base: {base[:12]}  old tip: {head[:12]}")
+    if new_tip:
+        print(f"new tip: {new_tip[:12]}")
+    if args.tag:
+        print(f"trail tag: {args.tag} -> {head[:12]}")
+    print("product tree unchanged")
+    if not drop_plans:
+        print(
+            "plan files kept; recorded phase hashes rewritten"
+            if hash_rewrite
+            else "plan files kept"
+        )
+    else:
+        print(f"plan files dropped from the new history: {plan_rel}")
+    if args.dry_run:
+        print("dry run: no branch, tag, or commit was created")
+    else:
+        current_name = current if current and current != "HEAD" else None
+        print("next:")
+        print(f"  git switch {branch}")
+        if not drop_plans:
+            print(f"  python3 {Path(__file__)} check {plan_dir}")
+        print("  run the plan's verification commands")
+        if not args.tag:
+            print(f"  git tag {current_name or branch}-trail {head}")
+        if current_name:
+            print(f"  git branch -f {current_name} {branch}")
+            print(f"  git switch {current_name}")
+            print("  git push --force-with-lease")
+        else:
+            print(
+                f"  git push --force-with-lease origin {branch}:<remote-branch>"
+            )
+    print("commits:")
+    for item in new_commits:
+        short = item["new"][:7] if item["new"] else "pending"
+        print(f"  {short} {item['subject']}")
+
+
 def cmd_check(args: argparse.Namespace) -> None:
     plan_dir = Path(args.plan_dir)
     result = validate_plan(plan_dir, strict=args.strict)
@@ -1085,6 +1541,43 @@ def main() -> None:
         help="archive root directory (default: <plans-root>/archive)",
     )
     archive.set_defaults(func=cmd_archive)
+
+    condense = sub.add_parser(
+        "condense", help="rebuild the branch as one commit per phase"
+    )
+    condense.add_argument("plan_dir")
+    condense.add_argument(
+        "--base", default=None, help="base commit (default: merge-base with the default branch)"
+    )
+    condense.add_argument(
+        "--branch", default=None, help="new branch name (default: <current>-condensed)"
+    )
+    condense.add_argument(
+        "--plans",
+        choices=("keep", "drop"),
+        default="keep",
+        help="keep plan files in the new history or drop them",
+    )
+    condense.add_argument(
+        "--keep",
+        action="append",
+        default=[],
+        metavar="HASH",
+        help="additional commit to keep as its own commit; repeatable",
+    )
+    condense.add_argument(
+        "--tag", default=None, help="tag the pre-condense tip with this name"
+    )
+    condense.add_argument(
+        "--dry-run", action="store_true", help="print the plan without creating refs"
+    )
+    condense.add_argument(
+        "--force",
+        action="store_true",
+        help="override History: keep or replace an existing branch or tag",
+    )
+    condense.add_argument("--json", action="store_true")
+    condense.set_defaults(func=cmd_condense)
 
     check = sub.add_parser("check", help="validate master and phase plans")
     check.add_argument("plan_dir")

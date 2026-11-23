@@ -22,7 +22,7 @@
 - **Unrecorded yolo** — auto-approving phases without `Mode: yolo` and the authorizing user in the master.
 - **Yolo without a review artifact** — implementing unattended without a draft PR or remote, so the human has nothing to review.
 - **Yolo past a blocker** — continuing to later phases after a blocked phase, a contract or scope change, or verification that cannot pass honestly.
-- **Yolo delivery** — merging, deploying, releasing, marking the PR ready, or rewriting history after unattended work.
+- **Yolo delivery** — merging, deploying, releasing, marking the PR ready, or rewriting history outside the tree-verified condense gate.
 
 ## Closeout
 
@@ -36,6 +36,7 @@
 - **PR without consent** — pushing a branch or opening a draft PR before the user explicitly agrees.
 - **Stale review plan** — asking for approval before committing the plan and pushing it to the open draft PR, so the reviewer sees an older version.
 - **Unpushed review PR** — leaving plan, phase, or closeout commits local while the draft PR is open.
+- **Bookkeeping history** — one plan, approval, in-progress, note, and closeout commit per phase, so a ten-phase PR has around a hundred commits. Condense to one commit per phase before review; keep only deliberate mechanical commits separate.
 - **Stale PR description** — leaving the plan-review title and body after the whole plan is implemented. Update the title to a conventional-commit title and the body with the issue, what was done, the decisions, and verification.
 - **Plan leftovers** — a completed master stays at the active plan path, so the next plan cannot use the slug. Archive it or remove it from the PR.
 
